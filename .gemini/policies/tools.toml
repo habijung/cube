@@ -1,0 +1,38 @@
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = ["ls", "cat", "find", "echo", "pwd", "grep", "whoami"]
+decision = "allow"
+priority = 100
+
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = ["git status", "git diff", "git log", "git branch", "git show"]
+decision = "allow"
+priority = 100
+
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = ["mkdir", "touch", "chmod", "npm install", "pip install", "cargo", "make"]
+decision = "ask_user"
+priority = 500
+
+[[rule]]
+toolName = "read_file"
+argsPattern = '.*\.env.*|secrets/.*'
+decision = "deny"
+deny_message = "Access to environment variables and secrets is restricted for security."
+priority = 950
+
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = ["sudo", "su", "mkfs", "dd", "reboot", "shutdown", "halt", "poweroff", "passwd", "env", "printenv", "curl", "wget", "ssh", "scp"]
+decision = "deny"
+deny_message = "Restricted system commands or network access."
+priority = 900
+
+[[rule]]
+toolName = "run_shell_command"
+commandRegex = 'git\s+push|--force|--hard|.*\b(rm|rmdir)\b.*'
+decision = "deny"
+deny_message = "Destructive operations are strictly prohibited."
+priority = 900
