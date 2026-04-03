@@ -19,3 +19,11 @@
 ```zsh
 source ./scripts/install.sh
 ```
+
+## 📚 References
+
+에이전트가 이 시스템의 규격이나 확장에 대해 더 자세한 정보가 필요한 경우, 다음 공식 문서들을 참고할 수 있습니다:
+
+- **Gemini CLI:** [Creating Agent Skills](https://geminicli.com/docs/cli/creating-skills/)
+- **Claude Code:** [Extending Claude with Skills](https://code.claude.com/docs/en/skills/)
+- **OpenCode:** [Agent Skills Documentation](https://opencode.ai/en/docs/skills/)
