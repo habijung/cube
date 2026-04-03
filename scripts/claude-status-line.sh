@@ -191,23 +191,20 @@ format_reset_time() {
     diff=$(( reset_epoch - now ))
     [ "$diff" -le 0 ] && { printf '%s' 'now'; return; }
 
-    today=$($DATE "+%Y-%m-%d")
     if [ "$OS" = "Darwin" ]; then
-        reset_date=$($DATE -r "$reset_epoch" "+%Y-%m-%d")
         reset_time=$($DATE -r "$reset_epoch" "+%H:%M")
         reset_dow=$($DATE  -r "$reset_epoch" "+%a")
         reset_day=$($DATE -r "$reset_epoch" "+%d" | sed 's/^0//')
         reset_mon=$($DATE  -r "$reset_epoch" "+%b")
     else
-        reset_date=$($DATE -d "@$reset_epoch" "+%Y-%m-%d")
         reset_time=$($DATE -d "@$reset_epoch" "+%H:%M")
         reset_dow=$($DATE  -d "@$reset_epoch" "+%a")
         reset_day=$($DATE -d "@$reset_epoch" "+%d" | sed 's/^0//')
         reset_mon=$($DATE  -d "@$reset_epoch" "+%b")
     fi
 
-    if [ "$today" = "$reset_date" ]; then
-        # Same day → show local HH:MM
+    if [ "$diff" -lt 86400 ]; then
+        # Within 24h (same day or next-day midnight) → show local HH:MM
         printf '%s' "$reset_time"
     elif [ "$diff" -lt 604800 ]; then
         # Within 7 days → show day-of-week abbreviation (Mon, Tue, …)
