@@ -39,7 +39,25 @@ else
   echo '   "statusLine": { "type": "command", "command": "bash ~/.claude/claude-status-line.sh" }'
 fi
 
-# 3. 추가 에이전트 심볼릭 링크 (Gemini, OpenCode 등 추후 구현)
+# 3. Claude Code skills symlinks
+SKILLS_SRC="$CUBE_PATH/skills"
+SKILLS_DEST="$HOME/.claude/skills"
+
+mkdir -p "$SKILLS_DEST"
+
+for skill_dir in "$SKILLS_SRC"/cube:*/; do
+  skill_name=$(basename "$skill_dir")
+  dest="$SKILLS_DEST/$skill_name"
+
+  if [[ -L "$dest" ]] && [[ "$(readlink "$dest")" == "$skill_dir" ]]; then
+    echo "✅ $skill_name is already symlinked."
+  else
+    ln -sf "$skill_dir" "$dest"
+    echo "✅ Symlinked: $dest → $skill_dir"
+  fi
+done
+
+# 4. 추가 에이전트 심볼릭 링크 (Gemini CLI, OpenCode 등 추후 구현)
 # echo "🔧 Future: Linking skills and configs for other agents..."
 
 echo "🏁 Setup complete!"
