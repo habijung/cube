@@ -10,6 +10,7 @@
 - `.config/opencode/`: OpenCode 전역 설정 템플릿
 - `templates/AGENTS.md`: 개별 프로젝트 루트에 복사하여 사용하는 로컬 지침 템플릿
 - `scripts/install.sh`: 설정 및 심볼릭 링크 자동화 스크립트
+- `scripts/claude-status-line.sh`: Claude Code 커스텀 status line 스크립트
 - `cube.zsh`: 에이전트 실행 단축 명령어(Alias) 모음
 
 ## 🚀 Getting Started

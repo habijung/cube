@@ -21,7 +21,25 @@ else
   echo "✅ cube.zsh is already sourced in ~/.zshrc."
 fi
 
-# 2. 에이전트별 스킬/명령어 심볼릭 링크 (추후 구현)
-echo "🔧 Future tasks: Linking skills and commands to agent config directories..."
+# 2. Claude Code status-line symlink
+STATUSLINE_SRC="$CUBE_PATH/scripts/claude-status-line.sh"
+STATUSLINE_DEST="$HOME/.claude/claude-status-line.sh"
+
+if [[ -L "$STATUSLINE_DEST" ]] && [[ "$(readlink "$STATUSLINE_DEST")" == "$STATUSLINE_SRC" ]]; then
+  echo "✅ claude-status-line.sh is already symlinked."
+elif [[ -f "$STATUSLINE_DEST" ]] && [[ ! -L "$STATUSLINE_DEST" ]]; then
+  echo "⚠️  [Dry Run] $STATUSLINE_DEST 는 일반 파일입니다. 수동으로 symlink로 교체하세요:"
+  echo "    rm $STATUSLINE_DEST"
+  echo "    ln -sf $STATUSLINE_SRC $STATUSLINE_DEST"
+else
+  echo "✨ Creating symlink for claude-status-line.sh..."
+  ln -sf "$STATUSLINE_SRC" "$STATUSLINE_DEST"
+  echo "✅ Symlinked: $STATUSLINE_DEST → $STATUSLINE_SRC"
+  echo "📝 ~/.claude/settings.json 에 다음 항목을 추가하세요:"
+  echo '   "statusLine": { "type": "command", "command": "bash ~/.claude/claude-status-line.sh" }'
+fi
+
+# 3. 추가 에이전트 심볼릭 링크 (Gemini, OpenCode 등 추후 구현)
+# echo "🔧 Future: Linking skills and configs for other agents..."
 
 echo "🏁 Setup complete!"
