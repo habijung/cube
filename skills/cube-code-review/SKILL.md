@@ -1,5 +1,5 @@
 ---
-name: cube:code-review
+name: cube-code-review
 description: 새로 작성한 코드, 특정 파일, PR 변경사항 등에 대해 코드 리뷰를 수행할 때 사용됩니다.
 argument-hint: "[파일 경로 또는 PR 번호]"
 disable-model-invocation: false # Claude, User 모두 사용 가능

@@ -1,5 +1,5 @@
 ---
-name: cube:question
+name: cube-question
 description: 코드에 대한 질문을 하면 그에 대한 답을 설명합니다. 코드를 수정하지 않습니다.
 argument-hint: "[질문1] [질문2] [질문3] ..."
 disable-model-invocation: false # Claude, User 모두 사용 가능
@@ -15,18 +15,8 @@ compatibility: opencode, claude, gemini
 
 사용자가 요청한 질문을 다음과 같이 조사하고 답변하세요:
 
-1. 각 주제마다 별도의 Explore agent를 background로 실행
-2. 모든 agent를 parallel로 실행
-3. 결과를 종합해서 보고
-
-실행 예시:
-
-```
-- Task 사용
-- subagent_type: "Explore"
-- run_in_background: true
-- 모든 Task를 단일 메세지에서 병렬 호출
-```
+1. 여러 질문(주제)이 주어졌을 경우, 각 환경에서 제공하는 자체 서브 에이전트(예: Gemini의 `generalist`, Claude의 `Task/Explore` 등) 또는 탐색 도구를 백그라운드(Background) 혹은 병렬(Parallel)로 실행하여 정보를 수집합니다.
+2. 수집된 결과를 종합하여 한 번에 사용자에게 보고합니다.
 
 ## Guidelines
 

@@ -1,5 +1,5 @@
 ---
-name: cube:commit
+name: cube-commit
 description: 변경 사항에 대해 커밋을 수행하거나 커밋 메시지를 추천할 때 사용되는 스킬입니다.
 argument-hint: "[메시지 힌트 또는 키워드]"
 disable-model-invocation: false # Claude, User 모두 사용 가능
