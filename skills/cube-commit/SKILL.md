@@ -1,6 +1,6 @@
 ---
 name: cube-commit
-description: 변경 사항에 대해 커밋을 수행하거나 커밋 메시지를 추천할 때 사용되는 스킬입니다.
+description: 변경 사항에 대해 커밋을 수행하거나 커밋 메시지를 추천할 때 사용되는 스킬입니다. trigger: /cube-commit, commit
 argument-hint: "[메시지 힌트 또는 키워드]"
 disable-model-invocation: false # Claude, User 모두 사용 가능
 allowed-tools: Bash
@@ -9,7 +9,7 @@ compatibility: opencode, claude, gemini
 
 # Commit Assistant
 
-사용자가 "커밋해줘", "Commit the changes", "커밋 메시지 추천"과 같은 요청을 할 때 이 스킬이 트리거됩니다.
+사용자가 "commit", "git commit", "Commit the changes", "커밋해줘", "커밋 메시지 추천"과 같은 요청을 할 때 이 스킬이 트리거됩니다.
 
 ## Instructions
 
