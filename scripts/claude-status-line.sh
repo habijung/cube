@@ -62,7 +62,7 @@ ctx=$(printf '%s' "$ctx_raw" | awk '{printf "%d", $1}')
 # 5h / 7d usage via Anthropic OAuth API (cached in /tmp)
 # ---------------------------------------------------------------------------
 CACHE_FILE="/tmp/claude_usage_cache.json"
-CACHE_TTL=600   # seconds (10 min)
+CACHE_TTL=300   # seconds (5 min)
 LOCK_DIR="/tmp/claude_usage_cache.lock"
 LOCK_STALE=30   # seconds — treat as stale if lock dir is older than this
 
