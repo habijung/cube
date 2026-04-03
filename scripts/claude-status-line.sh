@@ -81,7 +81,23 @@ if [ -f "$CACHE_FILE" ]; then
     is_error=$(printf '%s' "$cached" | jq -r '.error // empty' 2>/dev/null)
     ttl=$CACHE_TTL
     [ -n "$is_error" ] && ttl=600
-    [ "$age" -lt "$ttl" ] && usage_json="$cached"
+    if [ "$age" -lt "$ttl" ]; then
+        usage_json="$cached"
+        # Invalidate cache if 5h reset time has already passed
+        cached_5h_reset=$(printf '%s' "$usage_json" | jq -r '.five_hour.resets_at // empty' 2>/dev/null)
+        if [ -n "$cached_5h_reset" ]; then
+            cached_5h_norm=$(printf '%s' "$cached_5h_reset" | sed 's/\.[0-9]*//; s/[+-][0-9][0-9]:[0-9][0-9]$/Z/')
+            if [ "$OS" = "Darwin" ]; then
+                cached_5h_epoch=$($DATE -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$cached_5h_norm" "+%s" 2>/dev/null)
+            else
+                cached_5h_epoch=$($DATE -d "$cached_5h_norm" +%s 2>/dev/null)
+            fi
+            now_epoch=$($DATE +%s)
+            if [ -n "$cached_5h_epoch" ] && [ "$cached_5h_epoch" -le "$now_epoch" ]; then
+                usage_json=""  # Force refetch — reset has passed, cache is stale
+            fi
+        fi
+    fi
 fi
 
 # Fetch from API if cache is stale
