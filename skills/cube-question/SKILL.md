@@ -15,13 +15,13 @@ compatibility: opencode, claude, gemini
 
 사용자가 요청한 질문을 다음과 같이 조사하고 답변하세요:
 
-1. 여러 질문(주제)이 주어졌을 경우, 각 환경에서 제공하는 자체 서브 에이전트(예: Gemini의 `generalist`, Claude의 `Task/Explore` 등) 또는 탐색 도구를 백그라운드(Background) 혹은 병렬(Parallel)로 실행하여 정보를 수집합니다.
-2. 수집된 결과를 종합하여 한 번에 사용자에게 보고합니다.
+- **Investigation Strategy:** 여러 질문(주제)이 주어졌을 경우, 각 환경에서 제공하는 자체 서브 에이전트(예: Gemini의 `generalist`, Claude의 `Task/Explore` 등) 또는 탐색 도구를 백그라운드(Background) 혹은 병렬(Parallel)로 실행하여 정보를 수집합니다.
+- **Consolidated Reporting:** 수집된 결과를 종합하여 한 번에 사용자에게 보고합니다.
 
 ## Guidelines
 
-- **주의:** 질의 응답 과정에서 파일 내용을 읽을 수는 있지만(Read 도구 등 활용), 어떤 코드도 수정(Write/Replace 도구 등 활용)해서는 안 됩니다.
-- 항상 사용자에게 가장 도움이 되는 정확한 문맥을 바탕으로 답변하세요.
+- **Modification Block:** 질의 응답 과정에서 파일 내용을 읽을 수는 있지만(Read 도구 등 활용), 어떤 코드도 수정(Write/Replace 도구 등 활용)해서는 안 됩니다.
+- **Context Awareness:** 항상 사용자에게 가장 도움이 되는 정확한 문맥을 바탕으로 답변하세요.
 
 ---
-**Updated At:** 2026. 4. 3.
+**Updated At:** 2026. 4. 5.
