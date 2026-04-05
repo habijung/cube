@@ -9,17 +9,9 @@ if [[ ! -f "cube.sh" ]]; then
 fi
 
 CUBE_PATH="$(pwd)"
-echo "📦 Cube detected at: $CUBE_PATH"
+SKILLS_SRC="$CUBE_PATH/skills"
 
-# 인자 처리
-AGENTS=("$@")
-if [[ ${#AGENTS[@]} -eq 0 ]]; then
-  echo "ℹ️  No agents specified. Defaulting to: claude, gemini, opencode"
-  AGENTS=("claude" "gemini" "opencode")
-fi
-
-# 1. Alias 등록 (cube.sh)
-# 사용자의 쉘을 확인하여 ~/.bashrc 또는 ~/.zshrc 에 source 구문 추가
+# 쉘 설정 파일 탐색
 DETECTED_SHELL=$(basename "$SHELL")
 if [[ "$DETECTED_SHELL" == "zsh" ]]; then
   RC_FILE="$HOME/.zshrc"
@@ -30,14 +22,102 @@ elif [[ "$DETECTED_SHELL" == "bash" ]]; then
     RC_FILE="$HOME/.bashrc"
   fi
 else
-  echo "⚠️  Unsupported shell: $DETECTED_SHELL. Defaulting to ~/.bashrc"
   RC_FILE="$HOME/.bashrc"
 fi
 
+# 진단 기능 (Check Mode)
+check_installation() {
+  echo "🔍 Diagnosing Cube Environment..."
+  local errors=0
+
+  # 1. Alias Check
+  if grep -q "source $CUBE_PATH/cube.sh" "$RC_FILE" 2>/dev/null; then
+    echo "✅ [Alias] cube.sh is correctly sourced in $RC_FILE"
+  else
+    echo "❌ [Alias] cube.sh is NOT sourced in $RC_FILE"
+    errors=$((errors + 1))
+  fi
+
+  # 2. Agent Skills Check
+  local agents=("claude" "gemini" "opencode")
+  for agent in "${agents[@]}"; do
+    case "$agent" in
+      claude) DEST_BASE="$HOME/.claude" ;;
+      gemini) DEST_BASE="$HOME/.gemini" ;;
+      opencode) DEST_BASE="$HOME/.config/opencode" ;;
+    esac
+
+    local skills_dest="$DEST_BASE/skills"
+    if [[ -d "$skills_dest" ]]; then
+      echo "✅ [$agent] Skills directory exists: $skills_dest"
+      # 개별 스킬 심볼릭 링크 확인
+      for skill_dir in "$SKILLS_SRC"/cube-*/; do
+        skill_dir=${skill_dir%/}
+        skill_name=$(basename "$skill_dir")
+        dest="$skills_dest/$skill_name"
+        if [[ -L "$dest" ]] && [[ "$(readlink "$dest")" == "$skill_dir" ]]; then
+          echo "   - ✅ $skill_name: Symlinked correctly"
+        else
+          echo "   - ❌ $skill_name: Broken or missing link"
+          errors=$((errors + 1))
+        fi
+      done
+    else
+      echo "⚠️  [$agent] Skills directory not found. Skipping check for this agent."
+    fi
+  done
+
+  # 3. Claude specific status line check
+  local statusline_src="$CUBE_PATH/scripts/claude-status-line.sh"
+  local statusline_dest="$HOME/.claude/claude-status-line.sh"
+  if [[ -L "$statusline_dest" ]] && [[ "$(readlink "$statusline_dest")" == "$statusline_src" ]]; then
+    echo "✅ [Claude] status-line script symlinked correctly"
+  elif [[ -d "$HOME/.claude" ]]; then
+    echo "❌ [Claude] status-line script link missing"
+    errors=$((errors + 1))
+  fi
+
+  echo ""
+  if [[ $errors -eq 0 ]]; then
+    echo "✨ All systems nominal! Cube is correctly configured."
+  else
+    echo "⚠️  Found $errors issue(s). Run './scripts/install.sh' to fix them."
+  fi
+  exit $errors
+}
+
+# 인자 처리
+AGENTS=()
+CHECK_MODE=false
+
+for arg in "$@"; do
+  if [[ "$arg" == "--check" ]]; then
+    CHECK_MODE=true
+  else
+    AGENTS+=("$arg")
+  fi
+done
+
+if [[ "$CHECK_MODE" == true ]]; then
+  check_installation
+fi
+
+echo "📦 Cube detected at: $CUBE_PATH"
+
+if [[ ${#AGENTS[@]} -eq 0 ]]; then
+  echo "ℹ️  No agents specified. Defaulting to: claude, gemini, opencode"
+  AGENTS=("claude" "gemini" "opencode")
+fi
+
+# 1. Alias 등록 (cube.sh)
 if ! grep -q "source $CUBE_PATH/cube.sh" "$RC_FILE" 2>/dev/null; then
   echo "✨ Adding cube.sh to $RC_FILE..."
-  # echo "source $CUBE_PATH/cube.sh" >> "$RC_FILE"
-  echo "⚠️  [Dry Run] $RC_FILE 에 다음 줄을 추가하세요: source $CUBE_PATH/cube.sh"
+  echo "" >> "$RC_FILE"
+  echo "# Cube AI Agent Alias" >> "$RC_FILE"
+  echo "source $CUBE_PATH/cube.sh" >> "$RC_FILE"
+  echo "✅ Successfully added the following to $RC_FILE:"
+  echo "   source $CUBE_PATH/cube.sh"
+  echo "📝 Please run 'source $RC_FILE' or restart your terminal to apply changes."
 else
   echo "✅ cube.sh is already sourced in $RC_FILE."
 fi
@@ -51,21 +131,20 @@ if [[ " ${AGENTS[@]} " =~ " claude " ]]; then
   if [[ -L "$STATUSLINE_DEST" ]] && [[ "$(readlink "$STATUSLINE_DEST")" == "$STATUSLINE_SRC" ]]; then
     echo "✅ claude-status-line.sh is already symlinked."
   elif [[ -f "$STATUSLINE_DEST" ]] && [[ ! -L "$STATUSLINE_DEST" ]]; then
-    echo "⚠️  [Dry Run] $STATUSLINE_DEST 는 일반 파일입니다. 수동으로 symlink로 교체하세요:"
+    echo "⚠️  $STATUSLINE_DEST is a regular file. Please manually replace it with a symlink:"
     echo "    rm $STATUSLINE_DEST"
     echo "    ln -sf $STATUSLINE_SRC $STATUSLINE_DEST"
   else
     echo "✨ Creating symlink for claude-status-line.sh..."
     ln -sf "$STATUSLINE_SRC" "$STATUSLINE_DEST"
     echo "✅ Symlinked: $STATUSLINE_DEST → $STATUSLINE_SRC"
-    echo "📝 ~/.claude/settings.json 에 다음 항목을 추가하세요:"
+    echo "📝 Add the following to ~/.claude/settings.json:"
     echo '   "statusLine": { "type": "command", "command": "bash ~/.claude/claude-status-line.sh" }'
   fi
 fi
 
 # 3. Agent skills symlinks
 echo "🔧 Setting up Agent Skills..."
-SKILLS_SRC="$CUBE_PATH/skills"
 
 for agent in "${AGENTS[@]}"; do
   case "$agent" in
@@ -78,9 +157,7 @@ for agent in "${AGENTS[@]}"; do
   SKILLS_DEST="$DEST_BASE/skills"
   mkdir -p "$SKILLS_DEST"
 
-  # cube-* 패턴에 일치하는 폴더 검색
   for skill_dir in "$SKILLS_SRC"/cube-*/; do
-    # 마지막 슬래시 제거
     skill_dir=${skill_dir%/}
     skill_name=$(basename "$skill_dir")
     dest="$SKILLS_DEST/$skill_name"
