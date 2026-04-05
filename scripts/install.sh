@@ -1,9 +1,9 @@
-#!/usr/bin/env zsh
+#!/usr/bin/env bash
 
 # Cube 🧊 - AI Agent Config Installer
 
 # 현재 디렉토리가 cube 저장소 루트인지 확인
-if [[ ! -f "cube.zsh" ]]; then
+if [[ ! -f "cube.sh" ]]; then
   echo "❌ Error: Please run this script from the 'cube' root directory."
   exit 1
 fi
@@ -18,14 +18,28 @@ if [[ ${#AGENTS[@]} -eq 0 ]]; then
   AGENTS=("claude" "gemini" "opencode")
 fi
 
-# 1. Alias 등록 (cube.zsh)
-# ~/.zshrc 에 source 구문이 있는지 확인 후 추가
-if ! grep -q "source $CUBE_PATH/cube.zsh" ~/.zshrc; then
-  echo "✨ Adding cube.zsh to ~/.zshrc..."
-  # echo "source $CUBE_PATH/cube.zsh" >> ~/.zshrc
-  echo "⚠️  [Dry Run] ~/.zshrc 에 다음 줄을 추가하세요: source $CUBE_PATH/cube.zsh"
+# 1. Alias 등록 (cube.sh)
+# 사용자의 쉘을 확인하여 ~/.bashrc 또는 ~/.zshrc 에 source 구문 추가
+DETECTED_SHELL=$(basename "$SHELL")
+if [[ "$DETECTED_SHELL" == "zsh" ]]; then
+  RC_FILE="$HOME/.zshrc"
+elif [[ "$DETECTED_SHELL" == "bash" ]]; then
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    RC_FILE="$HOME/.bash_profile"
+  else
+    RC_FILE="$HOME/.bashrc"
+  fi
 else
-  echo "✅ cube.zsh is already sourced in ~/.zshrc."
+  echo "⚠️  Unsupported shell: $DETECTED_SHELL. Defaulting to ~/.bashrc"
+  RC_FILE="$HOME/.bashrc"
+fi
+
+if ! grep -q "source $CUBE_PATH/cube.sh" "$RC_FILE" 2>/dev/null; then
+  echo "✨ Adding cube.sh to $RC_FILE..."
+  # echo "source $CUBE_PATH/cube.sh" >> "$RC_FILE"
+  echo "⚠️  [Dry Run] $RC_FILE 에 다음 줄을 추가하세요: source $CUBE_PATH/cube.sh"
+else
+  echo "✅ cube.sh is already sourced in $RC_FILE."
 fi
 
 # 2. Claude Code status-line symlink
