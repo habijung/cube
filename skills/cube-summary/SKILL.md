@@ -37,25 +37,25 @@ compatibility: claude
 
 ## Web Usage Guide
 
-<!-- TODO: Update English Web Usage Guide to match the new heading-based structure and ensure cross-platform consistency. -->
 Gemini(Web), Claude.ai 등 슬래시 커맨드를 지원하지 않는 환경에서도 동일한 기능을 사용할 수 있습니다.
 
 **설정 방법:**
 
 1. 사용 중인 AI 서비스의 Custom Instructions(또는 System Prompt) 설정을 엽니다.
-2. 아래 내용을 추가합니다. `<prefix>` 부분은 원하는 단어로 변경하세요. (예: `my:summary`, `dev:summary`)
+2. 아래 내용을 추가합니다. `<prefix>` 부분은 원하는 단어로 변경하세요. (예: `my-summary`, `dev-summary`)
 
-```
-When I input `<prefix>:summary`, output a SINGLE Markdown code block. This output
-MUST serve as BOTH a mid-session summary for me to read, AND a context recovery
-prompt for a new chat session. Regardless of the conversation topic, summarize
-the following clearly:
+```text
+When I input `<prefix>-summary`, output a SINGLE Markdown code block serving as BOTH a mid-session summary AND a context recovery prompt. Summarize clearly using Markdown headings (##):
 
-1. Core Goal
-2. Current Status (use ✅ for done, ⏳ for pending)
-3. Key Decisions
-4. Limitations / Constraints
-5. Next Steps
+- ## 1. Core Goal: Detailed description of the main objective.
+- ## 2. Architecture & Key Context (Optional): Explicitly capture technical designs, data pipelines, etc.
+- ## 3. Current Status: Use ✅ for completed and ⏳ for pending tasks.
+- ## 4. Key Decisions & Constraints: Document important decisions and rules.
+- ## 5. Next Steps: Prioritized list of the next actions.
+
+You may generate additional ## headings (e.g., ## API Schema) if the context
+requires preserving deep technical details. Use paragraphs, sub-headings (###),
+code blocks, and tables as needed.
 
 End the block with:
 "Context loaded. Please acknowledge this summary and let me know when you are ready to proceed with the Next Steps."
@@ -63,7 +63,7 @@ End the block with:
 Wrap everything in one ```markdown``` block.
 ```
 
-3. Custom Instructions에 추가한 뒤, 대화 중 `<prefix>:summary`를 입력하면 작동합니다.
+3. Custom Instructions에 추가한 뒤, 대화 중 `<prefix>-summary`를 입력하면 작동합니다.
 
 ## Guidelines
 
