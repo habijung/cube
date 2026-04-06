@@ -43,8 +43,7 @@ check_installation() {
   for agent in "${agents[@]}"; do
     case "$agent" in
       claude) DEST_BASE="$HOME/.claude" ;;
-      gemini) DEST_BASE="$HOME/.gemini" ;;
-      opencode) DEST_BASE="$HOME/.config/opencode" ;;
+      gemini|opencode) DEST_BASE="$HOME/.agents" ;;
     esac
 
     local skills_dest="$DEST_BASE/skills"
@@ -146,11 +145,28 @@ fi
 # 3. Agent skills symlinks
 echo "🔧 Setting up Agent Skills..."
 
+# Cleanup old, conflicting paths if they exist
+echo "🧹 Cleaning up old skill paths..."
+for old_path in "$HOME/.gemini/skills" "$HOME/.config/opencode/skills"; do
+  if [[ -d "$old_path" ]]; then
+    for skill_dir in "$SKILLS_SRC"/cube-*/; do
+      skill_dir=${skill_dir%/}
+      skill_name=$(basename "$skill_dir")
+      old_link="$old_path/$skill_name"
+      if [[ -L "$old_link" ]]; then
+        rm "$old_link"
+        echo "   - Removed old link: $old_link"
+      fi
+    done
+    # Remove directory ONLY if empty
+    rmdir "$old_path" 2>/dev/null
+  fi
+done
+
 for agent in "${AGENTS[@]}"; do
   case "$agent" in
     claude) DEST_BASE="$HOME/.claude" ;;
-    gemini) DEST_BASE="$HOME/.gemini" ;;
-    opencode) DEST_BASE="$HOME/.config/opencode" ;;
+    gemini|opencode) DEST_BASE="$HOME/.agents" ;;
     *) echo "⚠️  Unknown agent: $agent. Skipping..."; continue ;;
   esac
 
