@@ -1,28 +1,176 @@
 ---
 name: cube-review
-description: 새로 작성한 코드, 특정 파일, PR 변경사항 등에 대해 코드 리뷰를 수행할 때 사용됩니다. trigger: /cube-review, code review, review
-argument-hint: "[파일 경로 또는 PR 번호]"
-disable-model-invocation: false # Claude, User 모두 사용 가능
-allowed-tools: Read, Grep
+description: 코드 리뷰를 수행합니다. 기본적으로 git diff HEAD를 분석하며, 파일 경로를 인자로 지정할 수도 있습니다. trigger: /cube-review, code review, review, 코드 리뷰, 리뷰해줘, 커밋 전 확인
+argument-hint: "[파일 경로] [--light] [--clear]"
+disable-model-invocation: false # 슬래시 명령 및 AI 의도 감지 모두 허용
+allowed-tools: Read, Grep, Bash, Task
 compatibility: opencode, claude, gemini
 ---
 
 # Code Reviewer
 
-사용자의 코드를 분석하고 품질 향상을 위한 피드백을 제공합니다.
+커밋 전 변경사항 또는 지정된 파일에 대해 코드 리뷰를 수행하고 결과를 `review.md`에 저장합니다.
 
-## Instructions
+## 사용법
 
-코드 리뷰 시 다음 항목들에 중점을 두어 피드백을 제공하세요:
-
-1. **Conventions & Standards:** 코드가 프로젝트의 기존 컨벤션, 아키텍처 패턴, 네이밍 규칙(Naming conventions)을 잘 따르고 있는지 검토하세요.
-2. **Efficiency & Security:** 불필요한 연산, 메모리 누수 위험, 비효율적인 렌더링 또는 잠재적인 보안 취약점이 없는지 확인하세요.
-3. **Maintainability & Readability:** 함수나 클래스가 단일 책임 원칙(SRP)을 위반하지 않는지, 변수/메서드 이름이 의도를 명확히 드러내는지 확인하세요.
-
-## Guidelines
-
-- **Constructive Feedback:** 단순한 문제 지적을 넘어 "이 부분을 이렇게 개선해보면 어떨까요?"처럼 건설적인 대안(최소 2가지 이상)을 제시하세요. 각 대안의 장단점(Pros/Cons)을 간략히 설명하세요.
-- **Non-Intervention Policy:** 리뷰는 오직 분석과 조언의 목적만 가집니다. 사용자가 명시적으로 수정을 요청하기 전까지는 절대로 코드를 직접 수정(Write/Replace)하지 마세요.
+```
+/cube-review              # 기본: git diff HEAD 전체 리뷰 (Claude: Opus / Gemini: Pro)
+/cube-review src/Foo.m    # 특정 파일 리뷰
+/cube-review --light      # 경량 모델 사용 (Claude: Sonnet / Gemini: Flash)
+/cube-review --clear      # review.md 초기화 후 리뷰
+```
 
 ---
-**Updated At:** 2026. 4. 5.
+
+## 실행 절차
+
+### Step 1 — 초기화
+
+다음 정보를 수집하십시오:
+
+1. **플래그 파악:** `--light`, `--clear` 유무를 기록하십시오.
+2. **파일 인자 확인:** 인자에 파일 경로가 있으면 해당 파일만 리뷰 대상으로 설정하십시오.
+3. **변경사항 수집:**
+   - 파일 경로 인자가 있으면: `git diff HEAD -- <파일 경로>`
+   - 없으면: `git diff HEAD` (staged + unstaged 전체)
+4. 변경된 파일이 없고 파일 인자도 없으면 "리뷰할 변경사항이 없습니다." 를 출력하고 종료하십시오.
+5. 현재 커밋 해시를 `git rev-parse --short HEAD` 로 기록하십시오.
+6. 현재 디렉토리에 `AGENTS.md` 또는 `CLAUDE.md` 파일이 있으면 경로를 기록하십시오 — Step 2에서 리뷰 에이전트에게 컨텍스트로 전달합니다.
+7. `--clear` 플래그 유무를 기록하십시오. 삭제는 Step 3 저장 직전에 수행합니다.
+
+### Step 2 — 리뷰 수행
+
+> **Non-Claude 환경 (OpenCode, Gemini):** 에이전트를 실행하지 않고 아래 두 에이전트의 체크리스트를 직접 수행하십시오.
+
+**Claude 환경:** 아래 2개의 에이전트를 **단일 메시지에서 모두 background=true로 동시 실행**하십시오.
+
+각 에이전트에게 다음 정보를 전달하십시오:
+
+- `git diff HEAD` 전문 (또는 지정 파일 diff)
+- 변경된 파일 목록
+- 프로젝트 루트 경로
+- `AGENTS.md` / `CLAUDE.md` 경로 (있을 경우)
+
+각 에이전트는 이슈마다 심각도를 판정하십시오:
+
+- 🔴 **[필수]**: 동작 오류 또는 보안 취약점. 즉시 수정 필요.
+- 🟡 **[권장]**: 수정하면 좋으나 블로커는 아님.
+- 🟢 **[참고]**: 개선 제안 또는 칭찬.
+
+**False positive로 제외할 항목:**
+
+- 변경하지 않은 라인의 기존 문제
+- 컴파일러/린터가 처리할 수 있는 타입 오류, 임포트 누락
+- 의도적인 변경으로 보이는 동작 차이
+- 이미 주석으로 무시된 이슈
+
+`--light` 플래그: 경량 모델 사용 (Claude: Sonnet / Gemini: Flash). 없으면 최상위 모델 사용 (Claude: Opus / Gemini: Pro).
+
+#### Agent 1 — 버그 & 아키텍처
+
+다음 사항을 확인하십시오:
+
+- **Null Safety:** null/nil 안전 처리 없이 강제 접근하는 코드
+- **File Access:** 파일 존재 확인 없이 바로 접근하는 코드
+- **Memory:** 클로저·람다 내부에서 순환 참조가 발생할 수 있는 캡처 패턴
+- **Resources:** 리소스(파일 핸들, 연결, 스트림 등) 해제 누락
+- **Security:** 보안 취약점 (OWASP Top 10 기준)
+- **Architecture:** `AGENTS.md` / `CLAUDE.md`에 명시된 아키텍처 레이어 경계 침범
+- **Concurrency:** 프로젝트의 표준 비동기/스레딩 패턴 준수 여부
+- 로컬 파일의 해당 라인을 실제 Read하여 맥락을 확인하십시오.
+
+#### Agent 2 — 네이밍 & 컨벤션 & 문서
+
+다음 사항을 확인하십시오:
+
+- **Naming:** `AGENTS.md` / `CLAUDE.md`에 명시된 네이밍 규칙 준수 여부
+- **Convention:** 변수·함수·타입 이름이 프로젝트 컨벤션과 일치하는지
+- **Structure:** 섹션 구분자가 적절히 사용되고 있는지
+- **Compliance:** `AGENTS.md` / `CLAUDE.md`가 명시적으로 요구하는 사항을 변경사항이 위반하는지
+- **Docs:** 하드코딩된 값(경로, 매핑, 상수)이 변경되었을 때 관련 문서도 함께 업데이트되었는지
+- 로컬 파일의 해당 라인을 실제 Read하여 맥락을 확인하십시오.
+
+### Step 3 — 결과 출력
+
+아래 형식으로 결과를 출력하고, **동일한 내용을 `{project_root}/review.md`에 저장**하십시오.
+
+- `--clear` 플래그가 있으면 저장 직전에 `{project_root}/review.md`를 삭제하십시오.
+- 파일이 없으면 새로 생성하십시오.
+- 있으면 **최신 결과를 맨 위에** 추가하십시오 (prepend).
+- 저장 시 맨 위에 헤더를 추가하십시오: `# YYYY-MM-DD HH:MM | HEAD: <hash>`
+
+---
+
+## Code Review
+
+### 요약
+
+변경 사항의 전체적인 목적과 영향을 2-3문장으로 요약.
+
+### 리뷰 의견
+
+🔴 **[필수]** 이슈 설명
+
+`파일경로:라인번호`
+
+```objc
+// Before
+[obj doSomething];
+
+// Option A: nil 체크 추가
+if (obj) { [obj doSomething]; }
+
+// Option B: early return 패턴
+if (!obj) { return; }
+[obj doSomething];
+```
+
+> **Option A** — Pros: 명시적 / Cons: 중첩 증가
+> **Option B** — Pros: early return으로 가독성 향상 / Cons: 함수 흐름 변경
+
+---
+
+🟡 **[권장]** 이슈 설명
+
+`파일경로:라인번호`
+
+```c
+// Before
+// After
+```
+
+---
+
+🟢 **[참고]** 개선 제안 또는 칭찬
+
+### 결론
+
+- 이슈: N건 (🔴 A / 🟡 B / 🟢 C)
+- 판정: ✅ 승인 / ⚠️ 조건부 승인 / ❌ 수정 필요
+
+---
+
+이슈가 없을 경우:
+
+---
+
+## Code Review
+
+No issues found. Checked bugs, architecture, naming, and AGENTS.md/CLAUDE.md compliance.
+
+- 판정: ✅ 승인
+
+---
+
+---
+
+## 모델 전략
+
+| 환경   | 기본 (최상위) | `--light` (경량) |
+| ------ | :-----------: | :--------------: |
+| Claude |     Opus      |      Sonnet      |
+| Gemini |      Pro      |      Flash       |
+
+---
+
+**Updated At:** 2026. 4. 6.
