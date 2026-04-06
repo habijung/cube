@@ -60,6 +60,14 @@ compatibility: opencode, claude, gemini
 **Updated At:** YYYY. M. D.
 ```
 
+## 🏗 Recommended Execution Patterns (Advanced)
+
+복잡한 작업을 수행하는 스킬(예: `cube-review`)의 경우, 예측 가능하고 안정적인 동작을 위해 **3-Step Structured Protocol**을 따르는 것을 권장합니다.
+
+1. **Step 1 — Initialization (초기화):** 사용자가 입력한 인자(파일 경로, 플래그 등)를 파싱하고, 프로젝트 상태(`git diff` 등) 및 컨텍스트 파일(`AGENTS.md`) 유무를 확인합니다.
+2. **Step 2 — Execution (수행):** 수집된 컨텍스트를 바탕으로 핵심 작업을 수행합니다. 가능한 경우 세부 태스크별로 서브 에이전트들을 병렬로 실행하여 효율을 높입니다.
+3. **Step 3 — Output (출력 및 저장):** 최종 결과를 출력하고, 필요한 경우 로컬 파일(예: `review.md`)에 저장하여 영속성을 확보합니다.
+
 ## 🔗 Compatibility & Integration
 
 각 에이전트별로 분산된 환경 설정을 줄이기 위해, 범용 에이전트들은 통합 디렉토리인 `~/.agents/skills`를 활용하는 것을 권장합니다.

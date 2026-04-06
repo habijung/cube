@@ -1,4 +1,5 @@
 # Cube 🧊
+
 **Unified AI Agent Configuration & Instruction System**
 
 [![Bash Support](https://img.shields.io/badge/Shell-Bash%20%7C%20Zsh-4EAA25.svg)](https://www.gnu.org/software/bash/)
@@ -18,26 +19,36 @@
 
 ## 📂 Project Structure
 
-| Directory/File | Description |
-| :--- | :--- |
-| `cube.sh` | 에이전트 실행 및 환경 통합을 위한 Alias 모음 |
-| `scripts/` | `install.sh` 및 환경별 커스텀 스크립트 모음 |
-| `skills/` | 모든 에이전트가 공유하는 통합 지침 (**SKILL.md**) |
-| `templates/` | 프로젝트 루트에 적용 가능한 로컬 설정 템플릿 |
+| Directory/File | Description                                       |
+| :------------- | :------------------------------------------------ |
+| `cube.sh`      | 에이전트 실행 및 환경 통합을 위한 Alias 모음      |
+| `scripts/`     | `install.sh` 및 환경별 커스텀 스크립트 모음       |
+| `skills/`      | 모든 에이전트가 공유하는 통합 지침 (**SKILL.md**) |
+| `templates/`   | 프로젝트 루트에 적용 가능한 로컬 설정 템플릿      |
 
 ## 🧩 Core Skills
 
-| Skill | Description |
-| :--- | :--- |
-| **`cube-commit`** | 원자적 커밋(Atomic Commits) 전략 기반의 커밋 보조 |
-| **`cube-question`** | 병렬 탐색을 통한 코드 및 아키텍처 질의응답 |
-| **`cube-review`** | 컨벤션 및 효율성 중심의 건설적 코드 리뷰 |
-| **`cube-summary`** | 세션 요약 및 컨텍스트 복구용 프롬프트 생성 (Web 호환) |
+| Skill               | Description                                           |
+| :------------------ | :---------------------------------------------------- |
+| **`cube-commit`**   | 원자적 커밋(Atomic Commits) 전략 기반의 커밋 보조     |
+| **`cube-question`** | 병렬 탐색을 통한 코드 및 아키텍처 질의응답            |
+| **`cube-review`**   | 3-Step 프로토콜 기반 코드 리뷰 (자동 `review.md` 로깅) |
+| **`cube-summary`**  | 세션 요약 및 컨텍스트 복구용 프롬프트 생성 (Web 호환) |
+
+### 🔍 `cube-review` Key Features
+- **Structured Protocol:** 초기화 → 리뷰(에이전트 병렬 실행) → 결과 출력의 3단계 워크플로우를 따릅니다.
+- **Model Strategies:** `Gemini Pro/Flash` 및 `Claude Opus/Sonnet` 등 상황에 맞는 최적의 모델 전략을 선택합니다.
+- **Auto Logging:** 리뷰 결과를 `review.md`에 자동으로 누적 저장하여 프로젝트의 품질 히스토리를 관리합니다.
+- **Functional Flags:**
+    - `--light`: 경량 모델(Flash, Sonnet)을 사용하여 빠른 피드백 제공
+    - `--clear`: 기존 `review.md`를 초기화하고 새로운 리뷰 결과만 기록
 
 ## 🛠 Getting Started
 
 ### 1. Manual Installation
+
 이 저장소를 클론한 후, 다음 명령어를 실행하여 환경을 구축하세요:
+
 ```bash
 # 기본 설치 (모든 에이전트 지원)
 bash ./scripts/install.sh
@@ -47,7 +58,9 @@ bash ./scripts/install.sh claude gemini
 ```
 
 ### 🤖 2. For AI Agents (Setup Instruction)
+
 AI 에이전트는 사용자가 "Cube 환경을 세팅해줘"라고 요청하면 다음 단계를 따르세요:
+
 1. **Agent Selection:** 어떤 에이전트(Claude, Gemini, OpenCode)를 설정할지 사용자에게 확인합니다.
 2. **Execution:** 선택된 에이전트를 인자로 하여 `bash ./scripts/install.sh <agents>`를 실행합니다.
 3. **Verification:** 실행 결과를 보고하고, 심볼릭 링크가 정상적으로 생성되었는지 확인합니다.
@@ -55,5 +68,6 @@ AI 에이전트는 사용자가 "Cube 환경을 세팅해줘"라고 요청하면
 ---
 
 ## 📚 References
+
 - [Gemini CLI Documentation](https://geminicli.com/docs/)
 - [Claude Code Documentation](https://code.claude.com/docs/)
