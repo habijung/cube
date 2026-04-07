@@ -37,7 +37,8 @@ compatibility: opencode, claude, gemini
 5. 현재 커밋 해시를 `git rev-parse --short HEAD` 로 기록하십시오.
 6. 현재 디렉토리에 `AGENTS.md` 또는 `CLAUDE.md` 파일이 있으면 경로를 기록하십시오 — Step 2에서 리뷰 에이전트에게 컨텍스트로 전달합니다.
 7. `--clear` 플래그 유무를 기록하십시오. 삭제는 Step 3 저장 직전에 수행합니다.
-8. **`.cube/` 초기화:** `.cube/` 디렉토리가 없으면 생성하고, `.cube/.gitignore`가 없으면 다음 내용으로 생성하십시오:
+8. **Large diff 분할:** diff가 3000줄을 초과하면, 변경된 파일 목록을 기준으로 파일 단위로 분할하여 각 에이전트에게 전달하십시오. 단일 파일이 3000줄을 초과하는 경우에는 분할 없이 그대로 전달하되, 에이전트에게 핵심 변경 로직에 집중하도록 지시하십시오.
+9. **`.cube/` 초기화:** `.cube/` 디렉토리가 없으면 생성하고, `.cube/.gitignore`가 없으면 다음 내용으로 생성하십시오:
    ```
    # Cube - Generated file tracking policy
    # Tracked: plans/ (persistent, git-committed)
@@ -84,6 +85,7 @@ compatibility: opencode, claude, gemini
 - **Security:** 보안 취약점 (OWASP Top 10 기준)
 - **Architecture:** `AGENTS.md` / `CLAUDE.md`에 명시된 아키텍처 레이어 경계 침범
 - **Concurrency:** 프로젝트의 표준 비동기/스레딩 패턴 준수 여부
+- **Error Handling:** 에러/예외 발생 시 적절한 처리(로깅, 전파, 복구) 없이 무시(silent swallow)하는 코드
 - 로컬 파일의 해당 라인을 실제 Read하여 맥락을 확인하십시오.
 
 #### Agent 2 — 네이밍 & 컨벤션 & 문서
@@ -180,4 +182,4 @@ No issues found. Checked bugs, architecture, naming, and AGENTS.md/CLAUDE.md com
 
 ---
 
-**Updated At:** 2026. 4. 6.
+**Updated At:** 2026. 4. 7.
