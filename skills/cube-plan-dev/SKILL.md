@@ -9,7 +9,7 @@ compatibility: opencode, claude, gemini
 
 # Plan Developer
 
-`.plan/<task-id>/`에 저장된 계획을 로드하여 개발을 수행합니다. Plan Agent가 수립한 계획을 Dev Agent가 별도 세션에서 이어받아 구현하는 비동기 핸드오프 스킬입니다.
+`.cube/plans/<task-id>/`에 저장된 계획을 로드하여 개발을 수행합니다. Plan Agent가 수립한 계획을 Dev Agent가 별도 세션에서 이어받아 구현하는 비동기 핸드오프 스킬입니다.
 
 ## 사용법
 
@@ -26,12 +26,13 @@ compatibility: opencode, claude, gemini
 
 활성 계획을 선택하십시오:
 
-1. **task-id 인자가 있으면:** `.plan/<task-id>/` 존재 여부를 확인
+1. **task-id 인자가 있으면:** `.cube/plans/<task-id>/` 존재 여부를 확인
 2. **인자가 없으면:**
-   - `.plan/index.md`를 읽어 활성 계획 목록 확인
+   - `.cube/plans/index.md`를 읽어 활성 계획 목록 확인
    - **1개:** 자동 선택
    - **2개 이상:** 목록을 제시하고 사용자에게 선택 요청
    - **0개:** "활성 계획이 없습니다. `/cube-plan`으로 새 계획을 생성하세요." 출력 후 종료
+
 
 ### Step 2 — 컨텍스트 로드
 
@@ -72,7 +73,7 @@ compatibility: opencode, claude, gemini
 
 - **커밋 시점:** Phase 단위, 또는 의미 있는 작업 단위 완료 시
 - **커밋 메시지:** `plan: Update <task-id> progress`
-- **커밋 범위:** `.plan/<task-id>/` 내 파일만 포함 (코드 변경은 별도 커밋)
+- **커밋 범위:** `.cube/plans/<task-id>/` 내 파일만 포함 (코드 변경은 별도 커밋)
 
 > **주의:** 코드 변경 커밋과 plan 진행 상황 커밋은 분리하십시오. 코드 커밋은 `cube-commit` 스킬 또는 프로젝트 컨벤션을 따르십시오.
 

@@ -9,7 +9,7 @@ compatibility: opencode, claude, gemini
 
 # Code Reviewer
 
-커밋 전 변경사항 또는 지정된 파일에 대해 코드 리뷰를 수행하고 결과를 `review.md`에 저장합니다.
+커밋 전 변경사항 또는 지정된 파일에 대해 코드 리뷰를 수행하고 결과를 `.cube/review.md`에 저장합니다.
 
 ## 사용법
 
@@ -17,7 +17,7 @@ compatibility: opencode, claude, gemini
 /cube-review              # 기본: git diff HEAD 전체 리뷰 (Claude: Opus / Gemini: Pro)
 /cube-review src/Foo.m    # 특정 파일 리뷰
 /cube-review --light      # 경량 모델 사용 (Claude: Sonnet / Gemini: Flash)
-/cube-review --clear      # review.md 초기화 후 리뷰
+/cube-review --clear      # .cube/review.md 초기화 후 리뷰
 ```
 
 ---
@@ -37,6 +37,13 @@ compatibility: opencode, claude, gemini
 5. 현재 커밋 해시를 `git rev-parse --short HEAD` 로 기록하십시오.
 6. 현재 디렉토리에 `AGENTS.md` 또는 `CLAUDE.md` 파일이 있으면 경로를 기록하십시오 — Step 2에서 리뷰 에이전트에게 컨텍스트로 전달합니다.
 7. `--clear` 플래그 유무를 기록하십시오. 삭제는 Step 3 저장 직전에 수행합니다.
+8. **`.cube/` 초기화:** `.cube/` 디렉토리가 없으면 생성하고, `.cube/.gitignore`가 없으면 다음 내용으로 생성하십시오:
+   ```
+   # Cube - Generated file tracking policy
+   # Tracked: plans/ (persistent, git-committed)
+   # Ignored: temporary outputs
+   review.md
+   ```
 
 ### Step 2 — 리뷰 수행
 
@@ -92,9 +99,9 @@ compatibility: opencode, claude, gemini
 
 ### Step 3 — 결과 출력
 
-아래 형식으로 결과를 출력하고, **동일한 내용을 `{project_root}/review.md`에 저장**하십시오.
+아래 형식으로 결과를 출력하고, **동일한 내용을 `{project_root}/.cube/review.md`에 저장**하십시오.
 
-- `--clear` 플래그가 있으면 저장 직전에 `{project_root}/review.md`를 삭제하십시오.
+- `--clear` 플래그가 있으면 저장 직전에 `{project_root}/.cube/review.md`를 삭제하십시오.
 - 파일이 없으면 새로 생성하십시오.
 - 있으면 **최신 결과를 맨 위에** 추가하십시오 (prepend).
 - 저장 시 맨 위에 헤더를 추가하십시오: `# YYYY-MM-DD HH:MM | HEAD: <hash>`

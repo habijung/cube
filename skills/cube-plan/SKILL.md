@@ -1,6 +1,6 @@
 ---
 name: cube-plan
-description: 구현 계획을 수립하고 .plan/ 디렉토리에 저장합니다. trigger: /cube-plan, 계획 세워줘, plan
+description: 구현 계획을 수립하고 .cube/plans/ 디렉토리에 저장합니다. trigger: /cube-plan, 계획 세워줘, plan
 argument-hint: "[task-id] \"설명\" [--list] [--close task-id]"
 disable-model-invocation: false
 allowed-tools: Bash, Read, Grep
@@ -9,7 +9,7 @@ compatibility: opencode, claude, gemini
 
 # Plan Creator
 
-구현 계획을 수립하고 `.plan/<task-id>/` 디렉토리에 파일로 저장합니다. Dev Agent가 별도 세션에서 계획을 로드하여 개발을 이어갈 수 있도록, 파일 시스템을 공유 매체로 사용하는 비동기 핸드오프 스킬입니다.
+구현 계획을 수립하고 `.cube/plans/<task-id>/` 디렉토리에 파일로 저장합니다. Dev Agent가 별도 세션에서 계획을 로드하여 개발을 이어갈 수 있도록, 파일 시스템을 공유 매체로 사용하는 비동기 핸드오프 스킬입니다.
 
 ## 사용법
 
@@ -40,7 +40,7 @@ Task ID를 결정하십시오:
 2. **자동 생성:** 설명 텍스트에서 핵심 키워드를 추출하여 `kebab-case`로 변환
    - 최대 30자, 영문 소문자 + 하이픈만 허용
    - 예: "로그인 화면 리팩토링" → `login-screen-refactor`
-3. **충돌 처리:** `.plan/<task-id>/`가 이미 존재하면 `-2`, `-3` 접미사를 자동 부여
+3. **충돌 처리:** `.cube/plans/<task-id>/`가 이미 존재하면 `-2`, `-3` 접미사를 자동 부여
 
 ### Step 3 — 프로젝트 컨텍스트 수집
 
@@ -68,23 +68,30 @@ Task ID를 결정하십시오:
 
 사용자 승인 후 다음을 수행하십시오:
 
-1. `.plan/<task-id>/` 디렉토리 생성
-2. 4개 파일(`plan.md`, `context.md`, `progress.md`, `decisions.md`) 생성
-3. `.plan/index.md` 업데이트 (없으면 새로 생성)
-4. `.plan/`이 `.gitignore`에 포함되어 있으면 경고 출력
-5. Git 커밋: `git add .plan/ && git commit -m "plan: Create <task-id>"`
+1. **`.cube/` 초기화:** `.cube/` 디렉토리가 없으면 생성하고, `.cube/.gitignore`가 없으면 다음 내용으로 생성하십시오:
+   ```
+   # Cube - Generated file tracking policy
+   # Tracked: plans/ (persistent, git-committed)
+   # Ignored: temporary outputs
+   review.md
+   ```
+2. `.cube/plans/<task-id>/` 디렉토리 생성
+3. 4개 파일(`plan.md`, `context.md`, `progress.md`, `decisions.md`) 생성
+4. `.cube/plans/index.md` 업데이트 (없으면 새로 생성)
+5. `.cube/plans/`가 `.gitignore`에 포함되어 있으면 경고 출력
+6. Git 커밋: `git add .cube/ && git commit -m "plan: Create <task-id>"`
 
 ### Step 6 — 계획 종료 (Close 모드 전용)
 
 `--close <task-id>` 실행 시:
 
-1. `.plan/<task-id>/progress.md`를 읽어 미완료 항목 확인
+1. `.cube/plans/<task-id>/progress.md`를 읽어 미완료 항목 확인
 2. **미완료 항목이 있으면** 경고 메시지를 출력하고 사용자 확인을 요청
 3. 사용자 승인 후:
-   - `.plan/<task-id>/` 디렉토리 삭제
-   - `.plan/index.md`에서 해당 행 제거
-   - 활성 계획이 0개가 되면 `.plan/index.md`도 삭제
-   - Git 커밋: `git add .plan/ && git commit -m "plan: Close <task-id>"`
+   - `.cube/plans/<task-id>/` 디렉토리 삭제
+   - `.cube/plans/index.md`에서 해당 행 제거
+   - 활성 계획이 0개가 되면 `.cube/plans/index.md`도 삭제
+   - Git 커밋: `git add .cube/ && git commit -m "plan: Close <task-id>"`
 
 ---
 
@@ -92,7 +99,7 @@ Task ID를 결정하십시오:
 
 `--list` 실행 시:
 
-1. `.plan/index.md`가 있으면 내용을 출력
+1. `.cube/plans/index.md`가 있으면 내용을 출력
 2. 없거나 활성 계획이 0개이면 "활성 계획이 없습니다." 출력
 
 ---
@@ -215,7 +222,7 @@ Task ID를 결정하십시오:
 - **Approval Gate:** Step 4에서 계획 초안을 반드시 사용자에게 제시하고, 명시적 승인 후에만 파일을 생성하십시오.
 - **No Push Policy:** `git push`는 절대 실행하지 마십시오.
 - **Accept Mode Only:** 이 스킬은 에이전트의 built-in plan mode를 사용하지 않습니다. 항상 accept/normal mode에서 실행하십시오.
-- **Git Tracking:** `.plan/` 디렉토리는 git에 포함됩니다. `.gitignore`에 추가하지 마십시오.
+- **Git Tracking:** `.cube/plans/` 디렉토리는 git에 포함됩니다. `.gitignore`에 추가하지 마십시오.
 - **Commit Convention:** 커밋 메시지는 `plan:` prefix를 사용하며, prefix 이후 첫 글자는 대문자로 시작합니다.
 
 ---

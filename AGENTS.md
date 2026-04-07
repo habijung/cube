@@ -17,6 +17,7 @@ Cube centralizes fragmented instructions (Skills) and environment settings into 
     - `claude-status-line.sh`: Custom status line integration for Claude Code.
 - **`templates/`**: Templates for project-specific instructions (e.g., `AGENTS.md`) to be used in local repositories.
 - **`cube.sh`**: Shell alias collection for various AI models and agents (Gemini, Claude, Ollama/OpenCode).
+- **`.cube/`**: Runtime output directory created by skills in target projects. Managed by `.cube/.gitignore` internally (`plans/` tracked, `review.md` ignored).
 
 ## 🛠 Usage & Development
 ### Key Commands
@@ -43,4 +44,4 @@ Cube centralizes fragmented instructions (Skills) and environment settings into 
 - **Web UI Optimization:** Use the "Summary-Detail" hybrid layout (compact table + detailed list) for readability in narrow viewports.
 
 ---
-**Updated At:** 2026. 4. 5.
+**Updated At:** 2026. 4. 7.
