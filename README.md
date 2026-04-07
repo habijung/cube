@@ -28,20 +28,23 @@
 
 ## 🧩 Core Skills
 
-| Skill               | Description                                           |
-| :------------------ | :---------------------------------------------------- |
-| **`cube-commit`**   | 원자적 커밋(Atomic Commits) 전략 기반의 커밋 보조     |
-| **`cube-question`** | 병렬 탐색을 통한 코드 및 아키텍처 질의응답            |
-| **`cube-review`**   | 3-Step 프로토콜 기반 코드 리뷰 (자동 `review.md` 로깅) |
-| **`cube-summary`**  | 세션 요약 및 컨텍스트 복구용 프롬프트 생성 (Web 호환) |
+| Skill               | Description                                                     |
+| :------------------ | :-------------------------------------------------------------- |
+| **`cube-commit`**   | 원자적 커밋(Atomic Commits) 전략 기반의 커밋 보조               |
+| **`cube-plan`**     | 구현 계획 수립 및 `.plan/` 디렉토리 기반 멀티 에이전트 핸드오프 |
+| **`cube-plan-dev`** | 저장된 계획을 로드하여 개발을 이어가는 컨텍스트 복구 스킬       |
+| **`cube-question`** | 병렬 탐색을 통한 코드 및 아키텍처 질의응답                      |
+| **`cube-review`**   | 3-Step 프로토콜 기반 코드 리뷰 (자동 `review.md` 로깅)          |
+| **`cube-summary`**  | 세션 요약 및 컨텍스트 복구용 프롬프트 생성 (Web 호환)           |
 
 ### 🔍 `cube-review` Key Features
+
 - **Structured Protocol:** 초기화 → 리뷰(에이전트 병렬 실행) → 결과 출력의 3단계 워크플로우를 따릅니다.
 - **Model Strategies:** `Gemini Pro/Flash` 및 `Claude Opus/Sonnet` 등 상황에 맞는 최적의 모델 전략을 선택합니다.
 - **Auto Logging:** 리뷰 결과를 `review.md`에 자동으로 누적 저장하여 프로젝트의 품질 히스토리를 관리합니다.
 - **Functional Flags:**
-    - `--light`: 경량 모델(Flash, Sonnet)을 사용하여 빠른 피드백 제공
-    - `--clear`: 기존 `review.md`를 초기화하고 새로운 리뷰 결과만 기록
+  - `--light`: 경량 모델(Flash, Sonnet)을 사용하여 빠른 피드백 제공
+  - `--clear`: 기존 `review.md`를 초기화하고 새로운 리뷰 결과만 기록
 
 ## 🛠 Getting Started
 

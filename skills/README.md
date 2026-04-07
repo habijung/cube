@@ -50,13 +50,16 @@ compatibility: opencode, claude, gemini
 이 스킬은 프론트엔드 코드 리뷰를 수행합니다.
 
 ## Instructions
+
 1. 컴포넌트는 항상 함수형으로 작성되었는지 확인하세요.
 2. 접근성(a11y) 위반 사항이 없는지 검토하세요.
 
 ## Guidelines
+
 - 상태 관리가 불필요하게 복잡하지 않은지 확인하고, 더 나은 대안을 제시하세요.
 
 ---
+
 **Updated At:** YYYY. M. D.
 ```
 
@@ -77,3 +80,14 @@ compatibility: opencode, claude, gemini
 - **Claude Code (전용 규격):** `~/.claude/skills/`
 
 추후 `scripts/install.sh` 스크립트를 통해 위 경로들에 대한 심볼릭 링크 생성을 자동화할 수 있습니다.
+
+## 📋 Skills List
+
+| Skill           | Description                                                     |
+| :-------------- | :-------------------------------------------------------------- |
+| `cube-commit`   | 원자적 커밋(Atomic Commits) 전략 기반의 커밋 보조               |
+| `cube-plan`     | 구현 계획 수립 및 `.plan/` 디렉토리 기반 멀티 에이전트 핸드오프 |
+| `cube-plan-dev` | 저장된 계획을 로드하여 개발을 이어가는 컨텍스트 복구 스킬       |
+| `cube-question` | 병렬 탐색을 통한 코드 및 아키텍처 질의응답                      |
+| `cube-review`   | 3-Step 프로토콜 기반 코드 리뷰 (자동 `review.md` 로깅)          |
+| `cube-summary`  | 세션 요약 및 컨텍스트 복구용 프롬프트 생성 (Web 호환)           |
