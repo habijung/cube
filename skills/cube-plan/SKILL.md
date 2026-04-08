@@ -13,7 +13,7 @@ compatibility: opencode, claude, gemini
 
 ## 사용법
 
-```
+```bash
 /cube-plan "로그인 화면 리팩토링"         # 새 계획 생성 (task-id 자동 생성)
 /cube-plan auth-refactor "인증 리팩토링"  # task-id 명시
 /cube-plan --list                         # 활성 계획 목록 조회
@@ -69,12 +69,14 @@ Task ID를 결정하십시오:
 사용자 승인 후 다음을 수행하십시오:
 
 1. **`.cube/` 초기화:** `.cube/` 디렉토리가 없으면 생성하고, `.cube/.gitignore`가 없으면 다음 내용으로 생성하십시오:
-   ```
+
+   ```gitignore
    # Cube - Generated file tracking policy
    # Tracked: plans/ (persistent, git-committed)
    # Ignored: temporary outputs
    review.md
    ```
+
 2. `.cube/plans/<task-id>/` 디렉토리 생성
 3. 4개 파일(`plan.md`, `context.md`, `progress.md`, `decisions.md`) 생성
 4. `.cube/plans/index.md` 업데이트 (없으면 새로 생성)
@@ -108,13 +110,16 @@ Task ID를 결정하십시오:
 
 ### index.md
 
-```markdown
+````markdown
 # Active Plans
 
-| Task ID   |  Status   | Branch   | Created    | Description |
+| Task ID | Status | Branch | Created | Description |
+
+```markdown
 | :-------- | :-------: | :------- | :--------- | :---------- |
-| <task-id> | 🟢 Active | <branch> | YYYY-MM-DD | <설명>      |
+| <task-id> | 🟢 Active | <branch> | YYYY-MM-DD | <설명> |
 ```
+````
 
 ### plan.md
 

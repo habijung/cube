@@ -13,7 +13,7 @@ compatibility: opencode, claude, gemini
 
 ## 사용법
 
-```
+```bash
 /cube-plan-dev                  # 활성 계획 자동 선택 (1개일 때)
 /cube-plan-dev auth-refactor    # task-id 명시
 ```
@@ -32,7 +32,6 @@ compatibility: opencode, claude, gemini
    - **1개:** 자동 선택
    - **2개 이상:** 목록을 제시하고 사용자에게 선택 요청
    - **0개:** "활성 계획이 없습니다. `/cube-plan`으로 새 계획을 생성하세요." 출력 후 종료
-
 
 ### Step 2 — 컨텍스트 로드
 

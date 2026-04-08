@@ -1,6 +1,6 @@
 # Cube 🧊
 
-**Unified AI Agent Configuration & Instruction System**
+## Unified AI Agent Configuration & Instruction System
 
 [![Bash Support](https://img.shields.io/badge/Shell-Bash%20%7C%20Zsh-4EAA25.svg)](https://www.gnu.org/software/bash/)
 [![AI-Powered](https://img.shields.io/badge/AI-Optimized-blueviolet.svg)](https://geminicli.com)
@@ -28,14 +28,14 @@
 
 ## 🧩 Core Skills
 
-| Skill               | Description                                                     |
-| :------------------ | :-------------------------------------------------------------- |
-| **`cube-commit`**   | 원자적 커밋(Atomic Commits) 전략 기반의 커밋 보조               |
-| **`cube-plan`**     | 구현 계획 수립 및 `.cube/plans/` 기반 멀티 에이전트 핸드오프    |
-| **`cube-plan-dev`** | 저장된 계획을 로드하여 개발을 이어가는 컨텍스트 복구 스킬       |
-| **`cube-question`** | 병렬 탐색을 통한 코드 및 아키텍처 질의응답                      |
-| **`cube-review`**   | 3-Step 프로토콜 기반 코드 리뷰 (자동 `.cube/review.md` 로깅)    |
-| **`cube-summary`**  | 세션 요약 및 컨텍스트 복구용 프롬프트 생성 (Web 호환)           |
+| Skill               | Description                                                  |
+| :------------------ | :----------------------------------------------------------- |
+| **`cube-commit`**   | 원자적 커밋(Atomic Commits) 전략 기반의 커밋 보조            |
+| **`cube-plan`**     | 구현 계획 수립 및 `.cube/plans/` 기반 멀티 에이전트 핸드오프 |
+| **`cube-plan-dev`** | 저장된 계획을 로드하여 개발을 이어가는 컨텍스트 복구 스킬    |
+| **`cube-question`** | 병렬 탐색을 통한 코드 및 아키텍처 질의응답                   |
+| **`cube-review`**   | 3-Step 프로토콜 기반 코드 리뷰 (자동 `.cube/review.md` 로깅) |
+| **`cube-summary`**  | 세션 요약 및 컨텍스트 복구용 프롬프트 생성 (Web 호환)        |
 
 ### 🔍 `cube-review` Key Features
 

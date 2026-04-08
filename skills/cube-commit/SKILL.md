@@ -38,7 +38,7 @@ compatibility: opencode, claude, gemini
 
 ### Example
 
-```
+```markdown
 feat: Add dark mode support in ThemeManager
 
 - Introduce system preference detection via NSAppearance

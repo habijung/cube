@@ -13,7 +13,7 @@ compatibility: opencode, claude, gemini
 
 ## 사용법
 
-```
+```bash
 /cube-review              # 기본: git diff HEAD 전체 리뷰 (Claude: Opus / Gemini: Pro)
 /cube-review src/Foo.m    # 특정 파일 리뷰
 /cube-review --light      # 경량 모델 사용 (Claude: Sonnet / Gemini: Flash)
@@ -39,7 +39,8 @@ compatibility: opencode, claude, gemini
 7. `--clear` 플래그 유무를 기록하십시오. 삭제는 Step 3 저장 직전에 수행합니다.
 8. **Large diff 분할:** diff가 3000줄을 초과하면, 변경된 파일 목록을 기준으로 파일 단위로 분할하여 각 에이전트에게 전달하십시오. 단일 파일이 3000줄을 초과하는 경우에는 분할 없이 그대로 전달하되, 에이전트에게 핵심 변경 로직에 집중하도록 지시하십시오.
 9. **`.cube/` 초기화:** `.cube/` 디렉토리가 없으면 생성하고, `.cube/.gitignore`가 없으면 다음 내용으로 생성하십시오:
-   ```
+
+   ```gitignore
    # Cube - Generated file tracking policy
    # Tracked: plans/ (persistent, git-committed)
    # Ignored: temporary outputs
@@ -110,9 +111,9 @@ compatibility: opencode, claude, gemini
 
 ---
 
-## Code Review
+## Code Review (Result Format)
 
-### 요약
+### Summary
 
 변경 사항의 전체적인 목적과 영향을 2-3문장으로 요약.
 
@@ -163,7 +164,7 @@ if (!obj) { return; }
 
 ---
 
-## Code Review
+## Code Review (No Issues Found)
 
 No issues found. Checked bugs, architecture, naming, and AGENTS.md/CLAUDE.md compliance.
 
