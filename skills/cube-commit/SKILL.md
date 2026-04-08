@@ -34,6 +34,7 @@ compatibility: opencode, claude, gemini
 2. **Description은 작업 의도와 근거 중심으로 작성**: 설명이 필요한 경우 `-` bullet으로 작성. 변경된 파일을 나열하는 방식(`- Update Foo.swift`)은 지양하고, 변경의 이유나 결과(`- Fix crash when input is empty`)를 기준으로 서술하세요. 단순 한 줄 설명이면 생략 가능.
 3. **Co-author 추가 금지**: AI agent가 생성한 커밋이라도 `Co-Authored-By:` 등의 트레일러를 절대 포함하지 않는다.
 4. **Subject에 대상 명시 (선택)**: 변경 대상이 명확할 경우 `in <파일명>` 또는 `of <컴포넌트>` 형태로 subject에 포함 가능.
+5. **Description 리스트 포맷팅**: Description을 작성할 때 여러 개의 리스트 항목(bullet point)을 나열하는 경우, 각 항목 사이에 절대 빈 줄(Empty Line)을 추가하지 마십시오. 항목들은 연속된 줄에 작성되어야 합니다.
 
 ### Example
 
@@ -45,4 +46,5 @@ feat: Add dark mode support in ThemeManager
 ```
 
 ---
-**Updated At:** 2026. 4. 5.
+
+**Updated At:** 2026. 4. 8.
