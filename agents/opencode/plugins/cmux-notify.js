@@ -1,14 +1,25 @@
 export const server = async (ctx) => {
+  let timer;
+  let hasError = false;
+
   return {
     event: async ({ event }) => {
       switch (event.type) {
         case "session.idle":
-          await ctx.$`cmux notify --title OpenCode --subtitle "Waiting for input"`.nothrow().quiet();
           break;
         case "session.error":
-          await ctx.$`cmux notify --title OpenCode --subtitle Error`.nothrow().quiet();
+          hasError = true;
           break;
+        default:
+          return;
       }
+
+      clearTimeout(timer);
+      timer = setTimeout(async () => {
+        const subtitle = hasError ? "Error" : "Waiting for input";
+        hasError = false;
+        await ctx.$`cmux notify --title OpenCode --subtitle ${subtitle}`.nothrow().quiet();
+      }, 500);
     },
   };
 };
