@@ -45,6 +45,7 @@ compatibility: opencode, claude, gemini
    # Tracked: plans/ (persistent, git-committed)
    # Ignored: temporary outputs
    review.md
+   summary.md
    ```
 
 ### Step 2 — 리뷰 수행
