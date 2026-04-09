@@ -67,7 +67,7 @@ check_installation() {
   done
 
   # 3. Claude specific status line check
-  local statusline_src="$CUBE_PATH/scripts/claude-status-line.sh"
+  local statusline_src="$CUBE_PATH/agents/claude/claude-status-line.sh"
   local statusline_dest="$HOME/.claude/claude-status-line.sh"
   if [[ -L "$statusline_dest" ]] && [[ "$(readlink "$statusline_dest")" == "$statusline_src" ]]; then
     echo "✅ [Claude] status-line script symlinked correctly"
@@ -124,7 +124,7 @@ fi
 # 2. Claude Code status-line symlink
 if [[ " ${AGENTS[@]} " =~ " claude " ]]; then
   echo "🔧 Setting up Claude Code specific configs..."
-  STATUSLINE_SRC="$CUBE_PATH/scripts/claude-status-line.sh"
+  STATUSLINE_SRC="$CUBE_PATH/agents/claude/claude-status-line.sh"
   STATUSLINE_DEST="$HOME/.claude/claude-status-line.sh"
 
   if [[ -L "$STATUSLINE_DEST" ]] && [[ "$(readlink "$STATUSLINE_DEST")" == "$STATUSLINE_SRC" ]]; then
