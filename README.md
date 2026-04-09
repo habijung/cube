@@ -26,6 +26,7 @@
 | `scripts/`     | `install.sh` 등 내부 자동화 스크립트                   |
 | `skills/`      | 모든 에이전트가 공유하는 통합 지침 (**SKILL.md**) |
 | `templates/`   | 프로젝트 루트에 적용 가능한 로컬 설정 템플릿      |
+| `.cube/`       | 스킬 실행 시 생성되는 런타임 출력 디렉토리 ([상세](.cube/README.md)) |
 
 ## 🧩 Core Skills
 
