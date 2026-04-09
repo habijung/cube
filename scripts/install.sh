@@ -39,8 +39,9 @@ check_installation() {
   fi
 
   # 2. Agent Skills Check
-  local agents=("claude" "gemini" "opencode")
-  for agent in "${agents[@]}"; do
+  local agents_to_check=("claude" "gemini" "opencode")
+  local missing_agents=()
+  for agent in "${agents_to_check[@]}"; do
     case "$agent" in
       claude) DEST_BASE="$HOME/.claude" ;;
       gemini|opencode) DEST_BASE="$HOME/.agents" ;;
@@ -49,6 +50,7 @@ check_installation() {
     local skills_dest="$DEST_BASE/skills"
     if [[ -d "$skills_dest" ]]; then
       echo "✅ [$agent] Skills directory exists: $skills_dest"
+      local agent_error=false
       # 개별 스킬 심볼릭 링크 확인
       for skill_dir in "$SKILLS_SRC"/cube-*/; do
         skill_dir=${skill_dir%/}
@@ -59,10 +61,13 @@ check_installation() {
         else
           echo "   - ❌ $skill_name: Broken or missing link"
           errors=$((errors + 1))
+          agent_error=true
         fi
       done
+      [[ "$agent_error" == true ]] && missing_agents+=("$agent")
     else
       echo "⚠️  [$agent] Skills directory not found. Skipping check for this agent."
+      missing_agents+=("$agent")
     fi
   done
 
@@ -74,12 +79,14 @@ check_installation() {
   elif [[ -d "$HOME/.claude" ]]; then
     echo "❌ [Claude] status-line script link missing"
     errors=$((errors + 1))
+    [[ ! " ${missing_agents[@]} " =~ " claude " ]] && missing_agents+=("claude")
   fi
 
   # 4. OpenCode specific plugins check
   local plugins_src="$CUBE_PATH/agents/opencode/plugins"
   local plugins_dest="$HOME/.config/opencode/plugins"
   if [[ -d "$plugins_dest" ]]; then
+    local opencode_plugin_error=false
     for plugin_file in "$plugins_src"/*.js; do
       [ -f "$plugin_file" ] || continue
       local plugin_name
@@ -90,17 +97,23 @@ check_installation() {
       else
         echo "❌ [OpenCode] $plugin_name plugin link missing"
         errors=$((errors + 1))
+        opencode_plugin_error=true
       fi
     done
+    [[ "$opencode_plugin_error" == true ]] && [[ ! " ${missing_agents[@]} " =~ " opencode " ]] && missing_agents+=("opencode")
   elif [[ -d "$HOME/.config/opencode" ]]; then
     echo "⚠️  [OpenCode] Plugins directory not found. Skipping check."
+    [[ ! " ${missing_agents[@]} " =~ " opencode " ]] && missing_agents+=("opencode")
   fi
 
   echo ""
-  if [[ $errors -eq 0 ]]; then
+  if [[ $errors -eq 0 && ${#missing_agents[@]} -eq 0 ]]; then
     echo "✨ All systems nominal! Cube is correctly configured."
   else
-    echo "⚠️  Found $errors issue(s). Run './scripts/install.sh' to fix them."
+    [[ $errors -gt 0 ]] && echo "⚠️  Found $errors issue(s)."
+    if [[ ${#missing_agents[@]} -gt 0 ]]; then
+      echo "💡 Recommendation: run './scripts/install.sh ${missing_agents[*]}' to complete the setup."
+    fi
   fi
   exit $errors
 }
