@@ -76,6 +76,26 @@ check_installation() {
     errors=$((errors + 1))
   fi
 
+  # 4. OpenCode specific plugins check
+  local plugins_src="$CUBE_PATH/agents/opencode/plugins"
+  local plugins_dest="$HOME/.config/opencode/plugins"
+  if [[ -d "$plugins_dest" ]]; then
+    for plugin_file in "$plugins_src"/*.js; do
+      [ -f "$plugin_file" ] || continue
+      local plugin_name
+      plugin_name=$(basename "$plugin_file")
+      local plugin_dest="$plugins_dest/$plugin_name"
+      if [[ -L "$plugin_dest" ]] && [[ "$(readlink "$plugin_dest")" == "$plugin_file" ]]; then
+        echo "✅ [OpenCode] $plugin_name plugin symlinked correctly"
+      else
+        echo "❌ [OpenCode] $plugin_name plugin link missing"
+        errors=$((errors + 1))
+      fi
+    done
+  elif [[ -d "$HOME/.config/opencode" ]]; then
+    echo "⚠️  [OpenCode] Plugins directory not found. Skipping check."
+  fi
+
   echo ""
   if [[ $errors -eq 0 ]]; then
     echo "✨ All systems nominal! Cube is correctly configured."
@@ -140,6 +160,33 @@ if [[ " ${AGENTS[@]} " =~ " claude " ]]; then
     echo "📝 Add the following to ~/.claude/settings.json:"
     echo '   "statusLine": { "type": "command", "command": "bash ~/.claude/claude-status-line.sh" }'
   fi
+fi
+
+# 2b. OpenCode plugins symlink
+if [[ " ${AGENTS[@]} " =~ " opencode " ]]; then
+  echo "🔧 Setting up OpenCode specific configs..."
+  PLUGINS_SRC="$CUBE_PATH/agents/opencode/plugins"
+  PLUGINS_DEST="$HOME/.config/opencode/plugins"
+
+  mkdir -p "$PLUGINS_DEST"
+
+  for plugin_file in "$PLUGINS_SRC"/*.js; do
+    [ -f "$plugin_file" ] || continue
+    plugin_name=$(basename "$plugin_file")
+    dest="$PLUGINS_DEST/$plugin_name"
+
+    if [[ -L "$dest" ]] && [[ "$(readlink "$dest")" == "$plugin_file" ]]; then
+      echo "✅ [OpenCode] $plugin_name is already symlinked."
+    elif [[ -f "$dest" ]] && [[ ! -L "$dest" ]]; then
+      echo "⚠️  $dest is a regular file. Please manually replace it with a symlink:"
+      echo "    rm $dest"
+      echo "    ln -sf $plugin_file $dest"
+    else
+      echo "✨ Creating symlink for $plugin_name..."
+      ln -sf "$plugin_file" "$dest"
+      echo "✅ [OpenCode] Symlinked: $dest → $plugin_file"
+    fi
+  done
 fi
 
 # 3. Agent skills symlinks

@@ -18,6 +18,7 @@ Cube centralizes fragmented instructions (Skills) and environment settings into 
   - `install.sh`: The main setup script. Handles shell alias registration, skill symlinking, and environment diagnosis (`--check`).
 - **`agents/`**: Agent-specific configurations and resources, organized by agent name.
   - `claude/`: Claude Code specific resources (e.g., `claude-status-line.sh`).
+  - `opencode/`: OpenCode specific resources (e.g., `plugins/cmux-notify.js`).
 - **`templates/`**: Templates for project-specific instructions (e.g., `AGENTS.md`) to be used in local repositories.
 - **`cube.sh`**: Shell alias collection for various AI models and agents (Gemini, Claude, Ollama/OpenCode).
 - **`.cube/`**: Runtime output directory created by skills in target projects. Managed by `.cube/.gitignore` internally (`plans/` tracked, `review.md` ignored).
