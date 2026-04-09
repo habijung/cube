@@ -1,0 +1,5 @@
+# Cube - Generated file tracking policy
+# Tracked: plans/ (persistent, git-committed)
+# Ignored: temporary outputs
+review.md
+summary.md
