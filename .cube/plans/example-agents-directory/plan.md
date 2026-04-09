@@ -1,3 +1,5 @@
+> **EXAMPLE** — 이 문서는 `cube-plan` 스킬의 출력 형식 예시입니다. 실제 작업 문서가 아닙니다.
+
 # Plan: agents-directory
 
 ## Overview
