@@ -9,7 +9,7 @@ compatibility: opencode, claude, gemini
 
 # Plan Developer
 
-`.cube/plans/<task-id>/`에 저장된 계획을 로드하여 개발을 수행합니다. Plan Agent가 수립한 계획을 Dev Agent가 별도 세션에서 이어받아 구현하는 비동기 핸드오프 스킬입니다.
+`.cube/plans/<task-id>.md`에 저장된 단일 계획 파일을 로드하여 개발을 수행합니다. Plan Agent가 수립한 계획을 Dev Agent가 별도 세션에서 이어받아 구현하고 최종 완료 처리까지 수행하는 비동기 핸드오프 스킬입니다.
 
 ## 사용법
 
@@ -26,7 +26,7 @@ compatibility: opencode, claude, gemini
 
 활성 계획을 선택하십시오:
 
-1. **task-id 인자가 있으면:** `.cube/plans/<task-id>/` 존재 여부를 확인
+1. **task-id 인자가 있으면:** `.cube/plans/<task-id>.md` 존재 여부를 확인
 2. **인자가 없으면:**
    - `.cube/plans/index.md`를 읽어 활성 계획 목록 확인
    - **1개:** 자동 선택
@@ -35,12 +35,12 @@ compatibility: opencode, claude, gemini
 
 ### Step 2 — 컨텍스트 로드
 
-선택된 계획의 4개 파일을 모두 읽으십시오:
+선택된 계획의 파일(`.cube/plans/<task-id>.md`) 전체를 읽어 다음 정보를 파악하십시오:
 
-1. `plan.md` — 전체 계획 구조 파악
-2. `context.md` — 프로젝트 컨텍스트 및 기술 스택 확인
-3. `progress.md` — 현재 진행 상황 확인
-4. `decisions.md` — 이전 의사결정 이력 확인
+1. `1. Context` — 프로젝트 컨텍스트 및 기술 스택 확인
+2. `2. Overview` — 전체 목표 파악
+3. `3. Progress & Phases` — 현재 진행 상황 파악
+4. `4. Decisions` — 이전 의사결정 이력 확인
 
 ### Step 3 — 진행 상황 요약
 
@@ -56,15 +56,15 @@ compatibility: opencode, claude, gemini
 
 ### Step 4 — 개발 수행
 
-사용자 승인 후, `progress.md`의 체크박스를 기준으로 순차적으로 개발을 수행하십시오.
+사용자 승인 후, `3. Progress & Phases`의 체크박스를 기준으로 순차적으로 개발을 수행하십시오.
 
 **진행 상황 갱신 규칙:**
 
-1. **체크박스 업데이트:** 각 작업 완료 시 `progress.md`의 해당 체크박스를 `[x]`로 변경하고 Summary 카운트를 갱신
+1. **체크박스 업데이트:** 각 작업 완료 시 `.cube/plans/<task-id>.md` 내의 해당 체크박스를 `[x]`로 변경하고 상단의 Summary 카운트(Done/Remaining)를 갱신
 2. **단건 체크:** 체크박스는 완료 시 하나씩 체크 (벌크 체크 금지)
-3. **체크 해제 금지:** 이미 체크된 항목의 해제가 필요한 경우, 반드시 `decisions.md`에 사유를 기록한 후 해제
-4. **계획 외 작업:** 계획에 없었으나 개발 중 필요해진 작업은 `progress.md`의 `### Unplanned` 섹션에 추가
-5. **의사결정 기록:** 계획과 다른 방향으로 진행하거나 중요한 결정을 내릴 때마다 `decisions.md`에 기록
+3. **체크 해제 금지:** 이미 체크된 항목의 해제가 필요한 경우, 반드시 `4. Decisions`에 사유를 기록한 후 해제
+4. **계획 외 작업:** 계획에 없었으나 개발 중 필요해진 작업은 `### Unplanned` 섹션에 추가
+5. **의사결정 기록:** 계획과 다른 방향으로 진행하거나 중요한 결정을 내릴 때마다 `4. Decisions`에 기록
 
 ### Step 5 — 진행 상황 커밋
 
@@ -72,20 +72,28 @@ compatibility: opencode, claude, gemini
 
 - **커밋 시점:** Phase 단위, 또는 의미 있는 작업 단위 완료 시
 - **커밋 메시지:** `plan: Update <task-id> progress`
-- **커밋 범위:** `.cube/plans/<task-id>/` 내 파일만 포함 (코드 변경은 별도 커밋)
+- **커밋 범위:** `.cube/plans/<task-id>.md` 파일만 포함 (코드 변경은 별도 커밋)
 
 > **주의:** 코드 변경 커밋과 plan 진행 상황 커밋은 분리하십시오. 코드 커밋은 `cube-commit` 스킬 또는 프로젝트 컨벤션을 따르십시오.
+
+### Step 6 — 계획 완료 및 종료 (Completion)
+
+`3. Progress & Phases`의 **모든 작업(체크박스)이 완료(`[x]`)되면**, 다음 절차를 반드시 수행하십시오:
+
+1. `.cube/plans/index.md` 파일을 읽고, 해당 `<task-id>` 행의 `Status` 컬럼을 `Complete`로 즉시 업데이트합니다.
+2. 사용자에게 개발 완료를 보고하십시오.
+3. 플랜을 공식적으로 닫고 최종 문서 정리를 위해, **`/cube-plan --close <task-id>` 명령어를 실행**하거나 사용자가 직접 입력하도록 안내하십시오.
 
 ---
 
 ## Guidelines
 
-- **Read Before Act:** 개발을 시작하기 전에 반드시 4개 파일을 모두 읽고 컨텍스트를 파악하십시오.
+- **Read Before Act:** 개발을 시작하기 전에 반드시 계획 파일을 모두 읽고 컨텍스트 파악을 진행하십시오.
 - **No Push Policy:** `git push`는 절대 실행하지 마십시오.
 - **Accept Mode Only:** 이 스킬은 에이전트의 built-in plan mode를 사용하지 않습니다. 항상 accept/normal mode에서 실행하십시오.
-- **Plan Respect:** 계획을 임의로 변경하지 마십시오. 변경이 필요하면 반드시 `decisions.md`에 기록하고 사용자에게 보고하십시오.
+- **Plan Respect:** 계획을 임의로 변경하지 마십시오. 변경이 필요하면 반드시 `4. Decisions` 섹션에 기록하고 사용자에게 보고하십시오.
 - **Commit Convention:** plan 관련 커밋 메시지는 `plan:` prefix를 사용하며, prefix 이후 첫 글자는 대문자로 시작합니다.
 
 ---
 
-**Updated At:** 2026. 4. 7.
+**Updated At:** 2026. 4. 10.
