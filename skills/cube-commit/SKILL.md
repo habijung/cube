@@ -31,20 +31,21 @@ compatibility: opencode, claude, gemini
 ## Commit Message Rules
 
 1. **Subject prefix 이후 첫 글자는 대문자로 시작**: `fix: Invalidate...` (O), `fix: invalidate...` (X)
-2. **Description은 작업 의도와 근거 중심으로 작성**: 설명이 필요한 경우 `-` bullet으로 작성. 변경된 파일을 나열하는 방식(`- Update Foo.swift`)은 지양하고, 변경의 이유나 결과(`- Fix crash when input is empty`)를 기준으로 서술하세요. 단순 한 줄 설명이면 생략 가능.
+2. **의도와 결과(Why & Outcome) 중심의 기록**: `git diff`로 확인 가능한 단순 코드 변경 사항(예: `- 수정 전 코드를 수정 후로 변경함`, `- header 1을 header 2로 수정`)은 **절대 본문에 작성하지 마십시오.** 대신 해당 수정이 **왜(Why)** 필요했는지, 그리고 수정 후 어떤 **결과(Outcome)**가 기대되는지를 기술하십시오. (예: `- 가독성 확보를 위해 헤더 계층 구조 최적화`, `- 컴파일 경고 제거를 위한 불필요한 캐스트 제거`)
 3. **Co-author 추가 금지**: AI agent가 생성한 커밋이라도 `Co-Authored-By:` 등의 트레일러를 절대 포함하지 않는다.
 4. **Subject에 대상 명시 (선택)**: 변경 대상이 명확할 경우 `in <파일명>` 또는 `of <컴포넌트>` 형태로 subject에 포함 가능.
 5. **Description 리스트 포맷팅**: Description을 작성할 때 여러 개의 리스트 항목(bullet point)을 나열하는 경우, 각 항목 사이에 절대 빈 줄(Empty Line)을 추가하지 마십시오. 항목들은 연속된 줄에 작성되어야 합니다.
+6. **본문 생략의 원칙**: 제목(Subject)만으로 변경의 의도와 내용이 명확히 전달되는 경우, 본문(Description)은 과감히 생략하고 제목만으로 커밋 메시지를 생성하십시오.
 
 ### Example
 
 ```markdown
 feat: Add dark mode support in ThemeManager
 
-- Introduce system preference detection via NSAppearance
-- Persist user selection to UserDefaults
+- Persist user selection to UserDefaults for cross-session consistency
+- Improve visual accessibility by aligning with system appearance settings
 ```
 
 ---
 
-**Updated At:** 2026. 4. 8.
+**Updated At:** 2026. 4. 11.
