@@ -27,9 +27,11 @@ Cube centralizes fragmented instructions (Skills) and environment settings into 
 
 ### Key Commands
 
-- **Install/Update:** `bash ./scripts/install.sh [agents...]` (e.g., `bash ./scripts/install.sh claude gemini`)
-- **Diagnose Environment:** `bash ./scripts/install.sh --check`
-- **Apply Aliases:** `source ~/.bashrc` or `source ~/.zshrc` (after installation).
+> **CRITICAL:** Always run the diagnostic check **before** performing a new installation or update.
+
+1. **Diagnose Environment (Mandatory):** `bash ./scripts/install.sh --check`
+2. **Install/Update:** `bash ./scripts/install.sh [agents...]` (e.g., `bash ./scripts/install.sh claude gemini`)
+3. **Apply Aliases:** `source ~/.bashrc` or `source ~/.zshrc` (after installation).
 
 ### Creating a New Skill
 
@@ -48,6 +50,7 @@ Cube centralizes fragmented instructions (Skills) and environment settings into 
 
 ## 📜 Development Conventions
 
+- **Diagnose First:** Always perform an environment diagnosis (`--check`) before any installation or major configuration change.
 - **Architecture First:** Always prioritize architectural design before code implementation.
 - **Atomic Commits:** Use `cube-commit` to ensure meaningful, atomic git commits.
 - **Cross-Shell Compatibility:** All scripts must remain compatible with both Bash and Zsh.
@@ -55,4 +58,4 @@ Cube centralizes fragmented instructions (Skills) and environment settings into 
 
 ---
 
-**Updated At:** 2026. 4. 7.
+**Updated At:** 2026. 4. 10.
