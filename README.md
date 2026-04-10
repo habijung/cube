@@ -9,6 +9,10 @@
 
 ---
 
+## 🤖 For AI Agents
+
+If you are an AI agent, your first action is to **read `AGENTS.md`** and perform the diagnostic mission defined there. This will synchronize your instructions and setup your environment for success.
+
 ## 🌟 Key Features
 
 - **Architecture First:** 모든 개발 작업 전 아키텍처 설계를 선행하여 견고한 소프트웨어 구조를 지향합니다.

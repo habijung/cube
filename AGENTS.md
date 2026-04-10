@@ -6,10 +6,27 @@ This directory contains **Cube**, a unified configuration and instruction system
 
 Cube centralizes fragmented instructions (Skills) and environment settings into a single repository. It ensures that whether you are using a CLI tool or a Web UI, the AI agent adheres to the same set of high-quality instructions, architecture-first principles, and development conventions.
 
-- **Main Technologies:** Bash/Zsh scripting, Markdown-based AI Instructions (Skills).
-- **Architecture:** Modular "Skills" (`skills/`) symlinked to specific agent directories, automated via an idempotent installation script (`scripts/install.sh`).
+## 🚀 Onboarding Mission for AI Agents
+
+If you are an AI agent accessing this repository for the first time, perform the following steps immediately to synchronize your context:
+
+1.  **Diagnose Environment:** Run `bash ./scripts/install.sh --check` to verify the current setup and identify missing dependencies or broken links.
+2.  **Explore Skills:** Scan the `skills/` directory to understand the available `cube-` commands and their specific instructions in `SKILL.md`.
+3.  **Check Active Plans:** Review `.cube/plans/index.md` to see if there are any ongoing tasks or handovers you should be aware of.
+4.  **Acknowledge Strategy:** Inform the user of your current diagnostic status and propose the next logical step based on your findings.
+
+## 🎨 Style & Linting
+
+To maintain documentation quality and consistency, this project uses **`markdownlint-cli2`** (maintained by David Anson).
+
+- **Verification:** Always run `npx markdownlint-cli2 "**/*.md" "#node_modules" "#.git"` before finalizing any documentation changes.
+- **Rules:** Follow the rules defined in `.markdownlint.json`.
+- **VS Code:** It is highly recommended to use the [markdownlint extension](https://marketplace.visualstudio.com/items?itemName=DavidAnson.vscode-markdownlint) for real-time feedback.
 
 ## 📂 Directory Overview
+
+- **Main Technologies:** Bash/Zsh scripting, Markdown-based AI Instructions (Skills).
+- **Architecture:** Modular "Skills" (`skills/`) symlinked to specific agent directories, automated via an idempotent installation script (`scripts/install.sh`).
 
 - **`skills/`**: The core of the system. Contains modular AI instructions.
   - Each skill (e.g., `cube-summary`, `cube-commit`) is a standalone directory with a `SKILL.md` file.
