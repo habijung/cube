@@ -24,4 +24,5 @@ compatibility: opencode, claude, gemini
 - **Context Awareness:** 항상 사용자에게 가장 도움이 되는 정확한 문맥을 바탕으로 답변하세요.
 
 ---
-**Updated At:** 2026. 4. 9.
+
+**Updated At:** 2026. 4. 11.

@@ -95,7 +95,7 @@ Task ID를 결정하십시오:
      - **Technical Details:** 주요 기술적 시도 및 해결 방안 (`Decisions` 기반)
      - **Known Issues:** 한계점, 남은 버그 또는 추후 과제
    - **아카이브 보관 (Archive):** 정제된 문서를 영구 보관용 디렉토리(예: `docs/tasks/<task-id>.md` 또는 `CHANGELOG.md` 등 프로젝트 상황에 맞게)에 저장합니다.
-   - **임시 파일 정리 (Cleanup):** 
+   - **임시 파일 정리 (Cleanup):**
      - `.cube/plans/<task-id>.md` 파일 삭제
      - `.cube/plans/index.md`에서 해당 행 제거 (활성 계획이 0개가 되면 파일 자체 삭제)
    - Git 커밋: `git add docs/ .cube/ && git commit -m "plan: Close and archive <task-id>"`
@@ -145,6 +145,7 @@ Task ID를 결정하십시오:
 ## 2. Overview
 
 <구현 목표와 배경을 2-3 문단으로 서술>
+
 - **References:** <관련 파일, 문서, URL 등>
 
 ## 3. Progress & Phases
@@ -164,6 +165,7 @@ Task ID를 결정하십시오:
 - [ ] Task 2.2: <설명>
 
 ### Unplanned
+
 <계획에 없었으나 개발 중 추가된 작업>
 
 ## 4. Decisions
@@ -185,4 +187,4 @@ Task ID를 결정하십시오:
 
 ---
 
-**Updated At:** 2026. 4. 10.
+**Updated At:** 2026. 4. 11.

@@ -10,10 +10,10 @@ Cube centralizes fragmented instructions (Skills) and environment settings into 
 
 If you are an AI agent accessing this repository for the first time, perform the following steps immediately to synchronize your context:
 
-1.  **Diagnose Environment:** Run `bash ./scripts/install.sh --check` to verify the current setup and identify missing dependencies or broken links.
-2.  **Explore Skills:** Scan the `skills/` directory to understand the available `cube-` commands and their specific instructions in `SKILL.md`.
-3.  **Check Active Plans:** Review `.cube/plans/index.md` to see if there are any ongoing tasks or handovers you should be aware of.
-4.  **Acknowledge Strategy:** Inform the user of your current diagnostic status and propose the next logical step based on your findings.
+1. **Diagnose Environment:** Run `bash ./scripts/install.sh --check` to verify the current setup and identify missing dependencies or broken links.
+2. **Explore Skills:** Scan the `skills/` directory to understand the available `cube-` commands and their specific instructions in `SKILL.md`.
+3. **Check Active Plans:** Review `.cube/plans/index.md` to see if there are any ongoing tasks or handovers you should be aware of.
+4. **Acknowledge Strategy:** Inform the user of your current diagnostic status and propose the next logical step based on your findings.
 
 ## 🎨 Style & Linting
 
@@ -75,4 +75,4 @@ To maintain documentation quality and consistency, this project uses **`markdown
 
 ---
 
-**Updated At:** 2026. 4. 10.
+**Updated At:** 2026. 4. 11.

@@ -23,13 +23,13 @@ If you are an AI agent, your first action is to **read `AGENTS.md`** and perform
 
 ## 📂 Project Structure
 
-| Directory/File | Description                                       |
-| :------------- | :------------------------------------------------ |
-| `cube.sh`      | 에이전트 실행 및 환경 통합을 위한 Alias 모음      |
-| `agents/`      | 에이전트별 전용 설정 및 리소스 (배포 대상 경로 미러링) |
-| `scripts/`     | `install.sh` 등 내부 자동화 스크립트                   |
-| `skills/`      | 모든 에이전트가 공유하는 통합 지침 (**SKILL.md**) |
-| `templates/`   | 프로젝트 루트에 적용 가능한 로컬 설정 템플릿      |
+| Directory/File | Description                                                          |
+| :------------- | :------------------------------------------------------------------- |
+| `cube.sh`      | 에이전트 실행 및 환경 통합을 위한 Alias 모음                         |
+| `agents/`      | 에이전트별 전용 설정 및 리소스 (배포 대상 경로 미러링)               |
+| `scripts/`     | `install.sh` 등 내부 자동화 스크립트                                 |
+| `skills/`      | 모든 에이전트가 공유하는 통합 지침 (**SKILL.md**)                    |
+| `templates/`   | 프로젝트 루트에 적용 가능한 로컬 설정 템플릿                         |
 | `.cube/`       | 스킬 실행 시 생성되는 런타임 출력 디렉토리 ([상세](.cube/README.md)) |
 
 ## 🧩 Core Skills

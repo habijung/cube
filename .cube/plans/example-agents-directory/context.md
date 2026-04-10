@@ -1,6 +1,6 @@
-> **EXAMPLE** — 이 문서는 `cube-plan` 스킬의 출력 형식 예시입니다. 실제 작업 문서가 아닙니다.
-
 # Context: agents-directory
+
+> **EXAMPLE** — 이 문서는 `cube-plan` 스킬의 출력 형식 예시입니다. 실제 작업 문서가 아닙니다.
 
 ## Project
 
@@ -21,7 +21,7 @@
 
 Cube는 AI 에이전트(Claude Code, Gemini CLI, OpenCode)의 설정과 스킬을 중앙에서 관리하는 시스템이다.
 
-```
+```text
 cube/
 ├── agents/       ← 에이전트 전용 리소스 (배포 대상 경로 미러링)
 ├── scripts/      ← cube 자체 유틸리티 (install.sh)
