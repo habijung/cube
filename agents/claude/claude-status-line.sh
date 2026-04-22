@@ -62,7 +62,7 @@ ctx=$(printf '%s' "$ctx_raw" | awk '{printf "%d", $1}')
 # 5h / 7d usage via Anthropic OAuth API (cached in /tmp)
 # ---------------------------------------------------------------------------
 CACHE_FILE="/tmp/claude_usage_cache.json"
-CACHE_TTL=300   # seconds (5 min)
+CACHE_TTL=180   # seconds (3 min)
 LOCK_DIR="/tmp/claude_usage_cache.lock"
 LOCK_STALE=30   # seconds — treat as stale if lock dir is older than this
 
@@ -83,19 +83,21 @@ if [ -f "$CACHE_FILE" ]; then
     [ -n "$is_error" ] && ttl=600
     if [ "$age" -lt "$ttl" ]; then
         usage_json="$cached"
-        # Invalidate cache if 5h reset time has already passed
-        cached_5h_reset=$(printf '%s' "$usage_json" | jq -r '.five_hour.resets_at // empty' 2>/dev/null)
-        if [ -n "$cached_5h_reset" ]; then
-            cached_5h_norm=$(printf '%s' "$cached_5h_reset" | sed 's/\.[0-9]*//; s/[+-][0-9][0-9]:[0-9][0-9]$/Z/')
+        # Invalidate cache if 5h or 7d reset time has already passed
+        _check_reset_passed() {
+            _reset_raw=$(printf '%s' "$usage_json" | jq -r "$1" 2>/dev/null)
+            [ -z "$_reset_raw" ] && return 1
+            _reset_norm=$(printf '%s' "$_reset_raw" | sed 's/\.[0-9]*//; s/[+-][0-9][0-9]:[0-9][0-9]$/Z/')
             if [ "$OS" = "Darwin" ]; then
-                cached_5h_epoch=$($DATE -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$cached_5h_norm" "+%s" 2>/dev/null)
+                _reset_epoch=$($DATE -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$_reset_norm" "+%s" 2>/dev/null)
             else
-                cached_5h_epoch=$($DATE -d "$cached_5h_norm" +%s 2>/dev/null)
+                _reset_epoch=$($DATE -d "$_reset_norm" +%s 2>/dev/null)
             fi
-            now_epoch=$($DATE +%s)
-            if [ -n "$cached_5h_epoch" ] && [ "$cached_5h_epoch" -le "$now_epoch" ]; then
-                usage_json=""  # Force refetch — reset has passed, cache is stale
-            fi
+            [ -n "$_reset_epoch" ] && [ "$_reset_epoch" -le "$($DATE +%s)" ]
+        }
+        if _check_reset_passed '.five_hour.resets_at // empty' || \
+           _check_reset_passed '.seven_day.resets_at // empty'; then
+            usage_json=""  # Force refetch — reset has passed, cache is stale
         fi
     fi
 fi
@@ -226,12 +228,30 @@ if [ -n "$usage_json" ]; then
     seven_d_util=$(printf '%s' "$usage_json" | jq -r '.seven_day.utilization // empty' 2>/dev/null)
     seven_d_reset=$(printf '%s' "$usage_json" | jq -r '.seven_day.resets_at // empty' 2>/dev/null)
 
+    # Return 0 if resets_at is in the past (reset occurred but API not yet updated)
+    _pct_or_zero() {
+        _util="$1"; _reset_raw="$2"
+        _pct=$(printf '%s' "$_util" | awk '{printf "%d", $1}')
+        if [ -n "$_reset_raw" ] && [ "$_reset_raw" != "null" ]; then
+            _norm=$(printf '%s' "$_reset_raw" | sed 's/\.[0-9]*//; s/[+-][0-9][0-9]:[0-9][0-9]$/Z/')
+            if [ "$OS" = "Darwin" ]; then
+                _epoch=$($DATE -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$_norm" "+%s" 2>/dev/null)
+            else
+                _epoch=$($DATE -d "$_norm" +%s 2>/dev/null)
+            fi
+            if [ -n "$_epoch" ] && [ "$_epoch" -le "$($DATE +%s)" ]; then
+                _pct=0
+            fi
+        fi
+        printf '%s' "$_pct"
+    }
+
     if [ -n "$five_h_util" ]; then
-        five_h_pct=$(printf '%s' "$five_h_util" | awk '{printf "%d", $1}')
+        five_h_pct=$(_pct_or_zero "$five_h_util" "$five_h_reset")
         five_h_at=$(format_reset_time "$five_h_reset")
     fi
     if [ -n "$seven_d_util" ]; then
-        seven_d_pct=$(printf '%s' "$seven_d_util" | awk '{printf "%d", $1}')
+        seven_d_pct=$(_pct_or_zero "$seven_d_util" "$seven_d_reset")
         seven_d_at=$(format_reset_time "$seven_d_reset")
     fi
 fi
