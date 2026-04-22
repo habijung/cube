@@ -1,6 +1,6 @@
 #!/bin/sh
 # Claude Code Custom Statusline
-# Format: short_path [| branch*] | model | ctx% | 5h:X%(HH:MM) | 7d:X%(Day or HH:MM)
+# Format: short_path [| branch*] | model | ctx% | 5H:X%(HH:MM) | 7D:X%(Day or HH:MM) [| EX:X%($Y.YY)]
 #
 # Requires: jq, python3, curl, git (all standard on macOS)
 # Usage: add to ~/.claude/settings.json:
@@ -221,6 +221,7 @@ five_h_pct="--"
 five_h_at="--"
 seven_d_pct="--"
 seven_d_at="--"
+extra_segment=""
 
 if [ -n "$usage_json" ]; then
     five_h_util=$(printf '%s' "$usage_json" | jq -r '.five_hour.utilization // empty' 2>/dev/null)
@@ -254,6 +255,16 @@ if [ -n "$usage_json" ]; then
         seven_d_pct=$(_pct_or_zero "$seven_d_util" "$seven_d_reset")
         seven_d_at=$(format_reset_time "$seven_d_reset")
     fi
+
+    # Extra usage — shown only when is_enabled: true
+    extra_enabled=$(printf '%s' "$usage_json" | jq -r '.extra_usage.is_enabled // false' 2>/dev/null)
+    if [ "$extra_enabled" = "true" ]; then
+        extra_util=$(printf '%s' "$usage_json" | jq -r '.extra_usage.utilization // 0' 2>/dev/null)
+        extra_credits=$(printf '%s' "$usage_json" | jq -r '.extra_usage.used_credits // 0' 2>/dev/null)
+        extra_pct=$(printf '%s' "$extra_util" | awk '{printf "%d", $1}')
+        extra_dollars=$(printf '%s' "$extra_credits" | awk '{printf "$%.2f", $1 / 100}')
+        extra_segment="EX:${extra_pct}%(${extra_dollars})"
+    fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -261,7 +272,8 @@ fi
 # ---------------------------------------------------------------------------
 out="$short_path"
 [ -n "$branch_segment" ] && out="${out} | ${branch_segment}"
-out="${out} | ${model} | ${ctx}% | 5h:${five_h_pct}%(${five_h_at}) | 7d:${seven_d_pct}%(${seven_d_at})"
+out="${out} | ${model} | ${ctx}% | 5H:${five_h_pct}%(${five_h_at}) | 7D:${seven_d_pct}%(${seven_d_at})"
+[ -n "$extra_segment" ] && out="${out} | ${extra_segment}"
 
 printf '%s\n' "$out"
 
