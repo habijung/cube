@@ -14,13 +14,31 @@ compatibility: opencode, claude, gemini
 ## Instructions
 
 1. **Status Investigation:** 쉘 명령어 `git status` 및 `git diff HEAD` (또는 `git diff --staged`)를 실행하여 현재 추적 중인 파일 상태와 구체적인 변경 내역을 확인하세요. 이전에 어떤 커밋들이 있었는지 보려면 `git log -n 3` 등을 활용하여 스타일을 파악하세요. **반드시 스킬 호출 시점에 명령어를 새로 실행하세요. 대화 컨텍스트에 남아 있는 이전 git 출력을 재사용해서는 안 됩니다.**
-2. **Author Verification:** `git config --local user.name`, `git config --local user.email`을 실행하여 local 설정 여부를 확인하세요. 다음 기준으로 처리하세요:
-   - **local 설정 있음:** 별도 보고 불필요, 다음 단계 진행
-   - **local 설정 없고 global 있음:** `git config --global user.name/email`을 확인한 뒤, 사용될 author와 출처(global)를 사용자에게 명시적으로 보고하세요.
+2. **Author Resolution (Silent):** 다음 순서로 author 정보를 수집하되, 오류가 없는 한 사용자에게 보고하지 마세요.
+   - `git config --local user.name` / `git config --local user.email` 실행 → local 설정 존재 여부를 내부적으로 기록 (출처 태그 결정용)
+   - `git config user.name` / `git config user.email` 실행 → 실제 사용될 author 확정 (local → global 자동 fallback)
    - **local, global 모두 없음:** 커밋을 진행하지 말고 사용자에게 경고하세요.
+   - `git remote get-url origin 2>/dev/null` 실행 → remote URL을 내부적으로 기록 (Step 5 경고 판단용)
 3. **Summary of Changes:** Staged / Unstaged / Untracked 파일 목록을 간결하게 정리하여 사용자에게 보고하세요. 스테이징되지 않은 파일이 있다면 현재 커밋 범위에서 제외됨을 함께 안내하세요.
 4. **Message Drafting:** 변경 내역을 바탕으로 명확하고 간결한 커밋 메시지 초안을 작성하세요. 커밋 메시지는 주로 '무엇을(what)' 했는지보다는 '왜(why)' 했는지에 초점을 맞춥니다. (Conventional Commits 스타일 권장)
-5. **Approval Request:** 작성한 커밋 메시지 초안을 사용자에게 제시하고, 수정이 필요한지 확인하세요. 사용자가 명시적으로 승인(예: "진행해줘", "OK", "approve")하기 전까지는 절대 커밋을 실행하지 마세요.
+5. **Approval Request:** 아래 형식으로 커밋 정보를 사용자에게 제시하고, 수정이 필요한지 확인하세요. 사용자가 명시적으로 승인(예: "진행해줘", "OK", "approve")하기 전까지는 절대 커밋을 실행하지 마세요.
+
+   ```text
+   Author : <name> <<email>>  (local)   ← local config 사용 시
+   Author : <name> <<email>>  (global)  ← global config fallback 시
+   Branch : <current-branch>
+   Message:
+     <commit subject>
+
+     <commit body (있는 경우)>
+   ```
+
+   - **`(global)` 태그이고 remote URL이 존재하는 경우:** Author 줄 바로 아래에 경고를 추가하세요.
+
+     ```text
+     ⚠️  Remote: <remote-url> — Local git config 미설정
+     ```
+
 6. **Commit Execution:** 사용자의 명시적 승인 이후 `git commit`을 실행하세요. `git push`는 사용자가 별도로 요청하지 않는 한 절대 실행하지 마세요.
 
 ## Guidelines
@@ -48,4 +66,4 @@ feat: Add dark mode support in ThemeManager
 
 ---
 
-**Updated At:** 2026. 4. 11.
+**Updated At:** 2026. 4. 25.
