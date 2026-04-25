@@ -1,7 +1,7 @@
 ---
 name: cube-review
-description: 코드 리뷰를 수행합니다. 기본적으로 git diff HEAD를 분석하며, 파일 경로를 인자로 지정할 수도 있습니다. trigger: /cube-review, code review, review, 코드 리뷰, 리뷰해줘, 커밋 전 확인
-argument-hint: "[파일 경로] [--light] [--clear]"
+description: 코드 리뷰를 수행합니다. 기본적으로 git diff HEAD를 분석하며, 파일 경로, 특정 커밋 해시, 커밋 범위를 인자로 지정할 수도 있습니다. trigger: /cube-review, code review, review, 코드 리뷰, 리뷰해줘, 커밋 전 확인
+argument-hint: "[파일 경로 | <hash> | <hash>..<hash>] [--light] [--clear]"
 disable-model-invocation: false # 슬래시 명령 및 AI 의도 감지 모두 허용
 allowed-tools: Read, Grep, Bash, Task
 compatibility: opencode, claude, gemini
@@ -14,10 +14,12 @@ compatibility: opencode, claude, gemini
 ## 사용법
 
 ```bash
-/cube-review              # 기본: git diff HEAD 전체 리뷰 (Claude: Opus / Gemini: Pro)
-/cube-review src/Foo.m    # 특정 파일 리뷰
-/cube-review --light      # 경량 모델 사용 (Claude: Sonnet / Gemini: Flash)
-/cube-review --clear      # .cube/review.md 초기화 후 리뷰
+/cube-review                       # 기본: git diff HEAD 전체 리뷰 (Claude: Opus / Gemini: Pro)
+/cube-review src/Foo.m             # 특정 파일 리뷰
+/cube-review abc1234               # 특정 커밋 리뷰
+/cube-review abc1234..def5678      # 커밋 범위 리뷰
+/cube-review --light               # 경량 모델 사용 (Claude: Sonnet / Gemini: Flash)
+/cube-review --clear               # .cube/review.md 초기화 후 리뷰
 ```
 
 ---
@@ -29,12 +31,22 @@ compatibility: opencode, claude, gemini
 다음 정보를 수집하십시오:
 
 1. **플래그 파악:** `--light`, `--clear` 유무를 기록하십시오.
-2. **파일 인자 확인:** 인자에 파일 경로가 있으면 해당 파일만 리뷰 대상으로 설정하십시오.
-3. **변경사항 수집:**
-   - 파일 경로 인자가 있으면: `git diff HEAD -- <파일 경로>`
-   - 없으면: `git diff HEAD` (staged + unstaged 전체)
-4. 변경된 파일이 없고 파일 인자도 없으면 "리뷰할 변경사항이 없습니다." 를 출력하고 종료하십시오.
-5. 현재 커밋 해시를 `git rev-parse --short HEAD` 로 기록하십시오.
+2. **인자 타입 감지:** 플래그를 제외한 첫 번째 인자를 분석하여 리뷰 모드를 결정하십시오.
+
+   | 조건                                    | 모드      | diff 명령어                              |
+   | --------------------------------------- | --------- | ---------------------------------------- |
+   | 인자 없음                               | 워킹트리  | `git diff HEAD`                          |
+   | 인자가 `..` 포함 (예: abc123..def456)  | 커밋 범위 | `git diff <start>..<end>`                |
+   | 인자가 16진수 7~40자 (예: abc1234)     | 단일 커밋 | `git show <hash>`                        |
+   | 그 외 (예: src/Foo.m)                  | 파일 경로 | `git diff HEAD -- <파일 경로>`           |
+
+3. **변경사항 수집:** 위 모드에 맞는 diff 명령어를 실행하십시오.
+   - 커밋 범위 모드는 `git diff <start>..<end>` 로 start~end 사이 모든 변경을 누적한 단일 diff를 수집합니다.
+4. 변경된 내용이 없으면 "리뷰할 변경사항이 없습니다." 를 출력하고 종료하십시오.
+5. **헤더 레이블 기록** (`.cube/review.md` 상단에 표시할 메타데이터):
+   - 워킹트리 / 파일 경로 모드: `git rev-parse --short HEAD` → `HEAD: <hash>`
+   - 단일 커밋 모드: `git rev-parse --short <hash>` → `commit: <hash>`
+   - 커밋 범위 모드: 양 끝 해시 각각 short resolve → `range: <start>..<end>`
 6. 현재 디렉토리에 `AGENTS.md` 또는 `CLAUDE.md` 파일이 있으면 경로를 기록하십시오 — Step 2에서 리뷰 에이전트에게 컨텍스트로 전달합니다.
 7. `--clear` 플래그 유무를 기록하십시오. 삭제는 Step 3 저장 직전에 수행합니다.
 8. **Large diff 분할:** diff가 3000줄을 초과하면, 변경된 파일 목록을 기준으로 파일 단위로 분할하여 각 에이전트에게 전달하십시오. 단일 파일이 3000줄을 초과하는 경우에는 분할 없이 그대로 전달하되, 에이전트에게 핵심 변경 로직에 집중하도록 지시하십시오.
@@ -56,7 +68,7 @@ compatibility: opencode, claude, gemini
 
 각 에이전트에게 다음 정보를 전달하십시오:
 
-- `git diff HEAD` 전문 (또는 지정 파일 diff)
+- Step 1에서 수집한 diff 전문 (모드에 따라 워킹트리 / 파일 / 단일 커밋 / 범위 누적 diff)
 - 변경된 파일 목록
 - 프로젝트 루트 경로
 - `AGENTS.md` / `CLAUDE.md` 경로 (있을 경우)
@@ -108,7 +120,10 @@ compatibility: opencode, claude, gemini
 - `--clear` 플래그가 있으면 저장 직전에 `{project_root}/.cube/review.md`를 삭제하십시오.
 - 파일이 없으면 새로 생성하십시오.
 - 있으면 **최신 결과를 맨 위에** 추가하십시오 (prepend).
-- 저장 시 맨 위에 헤더를 추가하십시오: `# YYYY-MM-DD HH:MM | HEAD: <hash>`
+- 저장 시 맨 위에 헤더를 추가하십시오 (모드별 형식):
+  - 워킹트리 / 파일 경로: `# YYYY-MM-DD HH:MM | HEAD: <hash>`
+  - 단일 커밋: `# YYYY-MM-DD HH:MM | commit: <hash>`
+  - 커밋 범위: `# YYYY-MM-DD HH:MM | range: <start>..<end>`
 
 ---
 
@@ -184,4 +199,4 @@ No issues found. Checked bugs, architecture, naming, and AGENTS.md/CLAUDE.md com
 
 ---
 
-**Updated At:** 2026. 4. 7.
+**Updated At:** 2026. 4. 25.
