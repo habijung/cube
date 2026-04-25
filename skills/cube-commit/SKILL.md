@@ -13,17 +13,30 @@ compatibility: opencode, claude, gemini
 
 ## Instructions
 
-1. **Status Investigation:** 쉘 명령어 `git status` 및 `git diff HEAD` (또는 `git diff --staged`)를 실행하여 현재 추적 중인 파일 상태와 구체적인 변경 내역을 확인하세요. 이전에 어떤 커밋들이 있었는지 보려면 `git log -n 3` 등을 활용하여 스타일을 파악하세요. **반드시 스킬 호출 시점에 명령어를 새로 실행하세요. 대화 컨텍스트에 남아 있는 이전 git 출력을 재사용해서는 안 됩니다.**
+1. **Status Investigation:** 쉘 명령어 `git status` 및 `git diff HEAD` (또는 `git diff --staged`)를 실행하여 현재 추적 중인 파일 상태와 구체적인 변경 내역을 확인하세요. 이전에 어떤 커밋들이 있었는지 보려면 `git log -n 3` 등을 활용하여 스타일을 참고하되, `## Commit Message Rules`에 정의된 규칙이 항상 우선합니다. **반드시 스킬 호출 시점에 명령어를 새로 실행하세요. 대화 컨텍스트에 남아 있는 이전 git 출력을 재사용해서는 안 됩니다.**
 2. **Author Resolution (Silent):** 다음 순서로 author 정보를 수집하되, 오류가 없는 한 사용자에게 보고하지 마세요.
    - `git config --local user.name` / `git config --local user.email` 실행 → local 설정 존재 여부를 내부적으로 기록 (출처 태그 결정용)
    - `git config user.name` / `git config user.email` 실행 → 실제 사용될 author 확정 (local → global 자동 fallback)
    - **local, global 모두 없음:** 커밋을 진행하지 말고 사용자에게 경고하세요.
-   - `git remote get-url origin 2>/dev/null` 실행 → remote URL을 내부적으로 기록 (Step 5 경고 판단용)
-3. **Summary of Changes:** Staged / Unstaged / Untracked 파일 목록을 간결하게 정리하여 사용자에게 보고하세요. 스테이징되지 않은 파일이 있다면 현재 커밋 범위에서 제외됨을 함께 안내하세요.
-4. **Message Drafting:** 변경 내역을 바탕으로 명확하고 간결한 커밋 메시지 초안을 작성하세요. 커밋 메시지는 주로 '무엇을(what)' 했는지보다는 '왜(why)' 했는지에 초점을 맞춥니다. (Conventional Commits 스타일 권장)
-5. **Approval Request:** 아래 형식으로 커밋 정보를 사용자에게 제시하고, 수정이 필요한지 확인하세요. 사용자가 명시적으로 승인(예: "진행해줘", "OK", "approve")하기 전까지는 절대 커밋을 실행하지 마세요.
+   - `git remote get-url origin 2>/dev/null` 실행 → remote URL을 내부적으로 기록 (제안 단계의 경고 메시지 출력 여부 판단용)
+3. **Context Analysis (Silent):** Step 1에서 수집한 `git diff HEAD` 결과를 재분석하여 현재 진행 중인 작업의 전체 맥락(큰 그림)을 파악하세요. 별도 명령어를 재실행하지 마세요. 결과를 사용자에게 별도로 보고하지 마세요.
+4. **Message Drafting:** 파악한 전체 맥락을 바탕으로 커밋 메시지 초안을 작성하되, 타겟은 다음 규칙을 따릅니다.
+   - **Staged 파일이 있는 경우:** 전체 작업 중 *현재 스테이징된 파일들*이 담당하는 역할에 맞춰 메시지를 작성합니다.
+   - **Staged 파일이 없는 경우:** 전체 변경 사항을 한 번에 커밋하려 한다고 간주합니다. Step 5 제안 시 스테이징 범위를 사용자에게 확인받고, 필요 시 추적된 파일만 포함하도록(`git add -u`) 안내하세요.
+   - 커밋 메시지는 '무엇을(what)' 했는지보다는 '왜(why)' 했는지에 초점을 맞춥니다. (Conventional Commits 스타일)
+5. **Proposal & Approval Request:** 파악된 작업 맥락, 파일 상태 요약, 그리고 커밋 메시지 초안을 아래 형식으로 한 번에 제시하여 승인을 요청하세요. 사용자가 명시적으로 승인(예: "진행해줘", "OK")하기 전까지는 절대 커밋을 실행하지 마세요.
 
    ```text
+   ### 💡 작업 맥락 요약
+   - (AI가 파악한 현재 진행 중인 전체 작업 요약 1~2줄)
+
+   ### 📦 커밋 대상 파일 상태
+   - 🟢 Staged: <파일 목록> (커밋 대상)
+   - 🟡 Unstaged (수정됨): <파일 목록> (커밋 제외 — 'git add' 필요)
+   - ⬜ Untracked (신규): <파일 목록> (추적되지 않음, 커밋 제외)
+     *(Staged 파일이 없는 경우 "추적 중인 전체 파일(`git add -u`)을 스테이징 후 커밋합니다"라고 안내하고 승인 요청)*
+
+   ---
    Author : <name> <<email>>  (local)   ← local config 사용 시
    Author : <name> <<email>>  (global)  ← global config fallback 시
    Branch : <current-branch>
