@@ -1,0 +1,5 @@
+[[rule]]
+toolName = "activate_skill"
+# 모든 스킬의 자동 실행을 허용
+decision = "allow"
+priority = 999

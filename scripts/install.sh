@@ -69,6 +69,37 @@ check_installation() {
       echo "⚠️  [$agent] Skills directory not found. Skipping check for this agent."
       missing_agents+=("$agent")
     fi
+
+    # Gemini specific policy check
+    if [[ "$agent" == "gemini" ]]; then
+      local policies_src="$CUBE_PATH/agents/gemini/policies"
+      local policies_dest="$HOME/.gemini/policies"
+      if [[ -d "$policies_src" ]]; then
+        for policy_file in "$policies_src"/*.toml; do
+          [ -f "$policy_file" ] || continue
+          local policy_name=$(basename "$policy_file")
+          local dest="$policies_dest/$policy_name"
+          if [[ -L "$dest" ]] && [[ "$(readlink "$dest")" == "$policy_file" ]]; then
+            echo "   - ✅ Policy $policy_name: Symlinked correctly"
+          else
+            echo "   - ❌ Policy $policy_name: Broken or missing link"
+            errors=$((errors + 1))
+          fi
+        done
+      fi
+    fi
+    # Gemini specific permanent approval check
+    if [[ "$agent" == "gemini" ]]; then
+      local gemini_settings="$HOME/.gemini/settings.json"
+      if [[ -f "$gemini_settings" ]]; then
+        if ! node -e "const fs=require('fs'); try { const c=JSON.parse(fs.readFileSync('$gemini_settings','utf8')); process.exit(c?.security?.enablePermanentToolApproval ? 0 : 1); } catch(e) { process.exit(1); }" 2>/dev/null; then
+          echo "⚠️  [Gemini] Permanent tool approval is NOT enabled in settings.json"
+          # This is a recommendation, not a hard error that stops setup
+        else
+          echo "   - ✅ Permanent tool approval: Enabled"
+        fi
+      fi
+    fi
   done
 
   # 3. Claude specific status line check
@@ -175,7 +206,48 @@ if [[ " ${AGENTS[@]} " =~ " claude " ]]; then
   fi
 fi
 
-# 2b. OpenCode plugins symlink
+# 2b. Gemini policies symlink
+if [[ " ${AGENTS[@]} " =~ " gemini " ]]; then
+  echo "🔧 Setting up Gemini specific policies..."
+  POLICIES_SRC="$CUBE_PATH/agents/gemini/policies"
+  POLICIES_DEST="$HOME/.gemini/policies"
+
+  if [[ -d "$POLICIES_SRC" ]]; then
+    mkdir -p "$POLICIES_DEST"
+    for policy_file in "$POLICIES_SRC"/*.toml; do
+      [ -f "$policy_file" ] || continue
+      policy_name=$(basename "$policy_file")
+      dest="$POLICIES_DEST/$policy_name"
+
+      if [[ -L "$dest" ]] && [[ "$(readlink "$dest")" == "$policy_file" ]]; then
+        echo "✅ [Gemini] $policy_name is already symlinked."
+      else
+        ln -sf "$policy_file" "$dest"
+        echo "✅ [Gemini] Symlinked: $dest → $policy_file"
+      fi
+    done
+  fi
+
+  # Check and ask for permanent tool approval
+  GEMINI_SETTINGS="$HOME/.gemini/settings.json"
+  if [[ -f "$GEMINI_SETTINGS" ]]; then
+    if node -e "const fs=require('fs'); try { const c=JSON.parse(fs.readFileSync('$GEMINI_SETTINGS','utf8')); process.exit(c?.security?.enablePermanentToolApproval ? 0 : 1); } catch(e) { process.exit(1); }" 2>/dev/null; then
+      echo "✅ [Gemini] Permanent tool approval is already enabled."
+    else
+      echo "⚠️  [Gemini] Permanent tool approval (for auto-allowing skills) is not enabled."
+      read -p "   Do you want to enable it now? (y/n): " enable_approval
+      if [[ "$enable_approval" =~ ^[Yy]$ ]]; then
+        node -e "const fs=require('fs'); const p='$GEMINI_SETTINGS'; try { const c=JSON.parse(fs.readFileSync(p,'utf8')); c.security = c.security || {}; c.security.enablePermanentToolApproval = true; fs.writeFileSync(p, JSON.stringify(c, null, 2), 'utf8'); console.log('✅ [Gemini] Enabled permanent tool approval.'); } catch(e) { console.error('❌ Failed to update settings.json', e); }"
+      else
+        echo "ℹ️  Skipped enabling permanent tool approval."
+      fi
+    fi
+  else
+    echo "⚠️  [Gemini] settings.json not found. Run gemini CLI first to generate default settings."
+  fi
+fi
+
+# 2c. OpenCode plugins symlink
 if [[ " ${AGENTS[@]} " =~ " opencode " ]]; then
   echo "🔧 Setting up OpenCode specific configs..."
   PLUGINS_SRC="$CUBE_PATH/agents/opencode/plugins"
