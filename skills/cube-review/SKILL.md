@@ -14,11 +14,11 @@ compatibility: opencode, claude, gemini
 ## 사용법
 
 ```bash
-/cube-review                       # 기본: git diff HEAD 전체 리뷰 (Claude: Opus / Gemini: Pro)
+/cube-review                       # 기본: git diff HEAD 전체 리뷰 (모델 전략 표 참고)
 /cube-review src/Foo.m             # 특정 파일 리뷰
 /cube-review abc1234               # 특정 커밋 리뷰
 /cube-review abc1234..def5678      # 커밋 범위 리뷰
-/cube-review --light               # 경량 모델 사용 (Claude: Sonnet / Gemini: Flash)
+/cube-review --light               # 경량 모델 사용 (모델 전략 표 참고)
 /cube-review --clear               # .cube/review.md 초기화 후 리뷰
 ```
 
@@ -55,7 +55,7 @@ compatibility: opencode, claude, gemini
    - 워킹트리 / 파일 경로 모드: `git rev-parse --short HEAD` → `HEAD: <hash>`
    - 단일 커밋 모드: `git rev-parse --short <hash>` → `commit: <hash>`
    - 커밋 범위 모드: 양 끝 해시 각각 short resolve → `range: <start>..<end>`
-6. 현재 디렉토리에 `AGENTS.md` 또는 `CLAUDE.md` 파일이 있으면 경로를 기록하십시오 — Step 2에서 리뷰 에이전트에게 컨텍스트로 전달합니다.
+6. 현재 디렉토리에서 AI 컨벤션 파일(`AGENTS.md`, `CLAUDE.md`, `GEMINI.md` 등)이 있으면 경로를 기록하십시오. 단, 동일 파일을 가리키는 symlink는 한 번만 전달합니다 (realpath 기반 dedup) — Step 2에서 리뷰 에이전트에게 컨텍스트로 전달합니다.
 7. `--clear` 플래그 유무를 기록하십시오. 삭제는 Step 3 저장 직전에 수행합니다.
 8. **Large diff 분할:** diff가 3000줄을 초과하면, 변경된 파일 목록을 기준으로 파일 단위로 분할하여 각 에이전트에게 전달하십시오. 단일 파일이 3000줄을 초과하는 경우에는 분할 없이 그대로 전달하되, 에이전트에게 핵심 변경 로직에 집중하도록 지시하십시오.
 9. **`.cube/` 초기화:** `.cube/` 디렉토리가 없으면 생성하고, `.cube/.gitignore`가 없으면 다음 내용으로 생성하십시오:
@@ -70,16 +70,36 @@ compatibility: opencode, claude, gemini
 
 ### Step 2 — 리뷰 수행
 
-> **Non-Claude 환경 (OpenCode, Gemini):** 에이전트를 실행하지 않고 아래 두 에이전트의 체크리스트를 직접 수행하십시오.
+호스트가 제공하는 sub-agent 도구로 Agent 1과 Agent 2를 **각각 별개의 sub-agent 호출로 dispatch하십시오. 단일 sub-agent 호출에 두 체크리스트를 통합하는 것은 금지합니다.** 두 호출은 단일 메시지에서 동시에 실행하고, 가능하면 병렬/background 옵션을 사용하십시오.
 
-**Claude 환경:** 아래 2개의 에이전트를 **단일 메시지에서 모두 background=true로 동시 실행**하십시오.
+| 호스트       | 도구명        | 호출 형식                                            |
+| ------------ | ------------- | ---------------------------------------------------- |
+| Claude Code  | `Task`        | `subagent_type: general-purpose`, `background: true` |
+| OpenCode     | `task`        | `subagent_type: <호스트에 등록된 generalist 계열>`     |
+| Gemini CLI   | `generalist`  | `generalist(request: string)`                        |
 
-각 에이전트에게 다음 정보를 전달하십시오:
+> 호스트가 sub-agent 도구를 제공하지 않는 경우에 한해 메인 에이전트가 두 reviewer 체크리스트를 순차 수행하십시오. 단, sub-agent 도구가 등록되어 있으면 **반드시 호출을 시도**하고, **실제 에러가 발생한 경우에만 fallback을 발동**합니다. 사전 추측이나 사용자 컨텍스트 기반 자가 판단으로 fallback을 발동하지 마십시오.
+
+> Claude Code의 `Task` 호출 시 `model` 결정 로직:
+> - `--light` 없음 → `model` 미명시 (부모 세션 모델 상속)
+> - `--light` 있음 + 부모 Opus 계열 → `model: "sonnet"` 명시
+> - `--light` 있음 + 부모 Sonnet/Haiku 계열 → `model` 미명시 (부모 상속)
+>
+> 정책: `--light` = `min(부모, sonnet)` — Opus만 Sonnet으로 다운시프트하고, Sonnet/Haiku 세션은 그대로. Haiku로 자동 진입하지 않습니다.
+
+각 에이전트에게 전달하는 프롬프트의 **맨 첫 줄에 반드시** 다음 문장을 포함하십시오 (anti-bias):
+
+> **이 메시지 외의 어떤 사전 컨텍스트나 의도 추정도 고려하지 마십시오. 아래 전달된 코드와 메타데이터만 보고 객관적으로 판정하십시오.**
+
+이어서 각 에이전트에게 다음 정보를 전달하십시오:
 
 - Step 1에서 수집한 diff 전문 (모드에 따라 워킹트리 / 파일 / 단일 커밋 / 범위 누적 diff)
 - 변경된 파일 목록
 - 프로젝트 루트 경로
-- `AGENTS.md` / `CLAUDE.md` 경로 (있을 경우)
+- AI 컨벤션 파일 경로 (있을 경우, symlink dedup 후)
+- 해당 에이전트의 체크리스트 (아래 "Agent 1" 또는 "Agent 2" 섹션 전체)
+- 심각도 판정 룰(🔴/🟡/🟢)과 False positive 제외 룰 (아래 본문 그대로)
+- 출력 형식 (이슈 발견 시 / No issues 시 각각의 포맷)
 
 각 에이전트는 이슈마다 심각도를 판정하십시오:
 
@@ -94,7 +114,7 @@ compatibility: opencode, claude, gemini
 - 의도적인 변경으로 보이는 동작 차이
 - 이미 주석으로 무시된 이슈
 
-`--light` 플래그: 경량 모델 사용 (Claude: Sonnet / Gemini: Flash). 없으면 최상위 모델 사용 (Claude: Opus / Gemini: Pro).
+`--light` 플래그: 경량 모델 사용. 호스트별 매핑은 아래 "모델 전략" 표 참고.
 
 #### Agent 1 — 버그 & 아키텍처
 
@@ -105,7 +125,7 @@ compatibility: opencode, claude, gemini
 - **Memory:** 클로저·람다 내부에서 순환 참조가 발생할 수 있는 캡처 패턴
 - **Resources:** 리소스(파일 핸들, 연결, 스트림 등) 해제 누락
 - **Security:** 보안 취약점 (OWASP Top 10 기준)
-- **Architecture:** `AGENTS.md` / `CLAUDE.md`에 명시된 아키텍처 레이어 경계 침범
+- **Architecture:** 프로젝트의 AI 컨벤션 파일에 명시된 아키텍처 레이어 경계 침범
 - **Concurrency:** 프로젝트의 표준 비동기/스레딩 패턴 준수 여부
 - **Error Handling:** 에러/예외 발생 시 적절한 처리(로깅, 전파, 복구) 없이 무시(silent swallow)하는 코드
 - 로컬 파일의 해당 라인을 실제 Read하여 맥락을 확인하십시오.
@@ -114,10 +134,10 @@ compatibility: opencode, claude, gemini
 
 다음 사항을 확인하십시오:
 
-- **Naming:** `AGENTS.md` / `CLAUDE.md`에 명시된 네이밍 규칙 준수 여부
+- **Naming:** 프로젝트의 AI 컨벤션 파일에 명시된 네이밍 규칙 준수 여부
 - **Convention:** 변수·함수·타입 이름이 프로젝트 컨벤션과 일치하는지
 - **Structure:** 섹션 구분자가 적절히 사용되고 있는지
-- **Compliance:** `AGENTS.md` / `CLAUDE.md`가 명시적으로 요구하는 사항을 변경사항이 위반하는지
+- **Compliance:** 프로젝트의 AI 컨벤션 파일이 명시적으로 요구하는 사항을 변경사항이 위반하는지
 - **Docs:** 하드코딩된 값(경로, 매핑, 상수)이 변경되었을 때 관련 문서도 함께 업데이트되었는지
 - 로컬 파일의 해당 라인을 실제 Read하여 맥락을 확인하십시오.
 
@@ -190,7 +210,7 @@ if (!obj) { return; }
 
 ## Code Review (No Issues Found)
 
-No issues found. Checked bugs, architecture, naming, and AGENTS.md/CLAUDE.md compliance.
+No issues found. Checked bugs, architecture, naming, and project AI convention file compliance.
 
 - 판정: ✅ 승인
 
@@ -200,11 +220,14 @@ No issues found. Checked bugs, architecture, naming, and AGENTS.md/CLAUDE.md com
 
 ## 모델 전략
 
-| 환경   | 기본 (최상위) | `--light` (경량) |
-| ------ | :-----------: | :--------------: |
-| Claude |     Opus      |      Sonnet      |
-| Gemini |      Pro      |      Flash       |
+| 환경     | 기본                    | `--light`                          |
+| -------- | :---------------------- | :--------------------------------- |
+| Claude   | 호스트 세션 모델 (상속)  | Opus만 Sonnet으로 다운, 그 외 상속    |
+| OpenCode | 호스트 설정 기본         | 호스트 설정 light                   |
+| Gemini   | Pro                     | Flash                              |
+
+> 회사 환경 등 Pro 미가용 시에는 Flash로 자동 fallback. Flash 모델로도 핵심 보안·크래시 이슈에 대한 객관 판정이 가능합니다.
 
 ---
 
-**Updated At:** 2026. 4. 25.
+**Updated At:** 2026. 4. 27.
