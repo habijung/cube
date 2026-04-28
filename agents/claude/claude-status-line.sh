@@ -5,6 +5,7 @@
 # Requires: jq, python3, curl, git (all standard on macOS)
 # Usage: add to ~/.claude/settings.json:
 #   "statusLine": { "type": "command", "command": "bash ~/.claude/claude-status-line.sh" }
+# Debug: STATUSLINE_DEBUG=1 dumps stdin JSON to /tmp/claude_statusline_input.log
 
 input=$(cat)
 OS=$(uname -s 2>/dev/null)
@@ -54,15 +55,59 @@ model=$(printf '%s' "$input" | jq -r '.model.display_name // "Unknown"' | sed 's
 
 # ---------------------------------------------------------------------------
 # Context percentage
+#   Trust stdin's .context_window.used_percentage as the source of truth —
+#   Claude Code knows the actual context limit (200K vs 1M) and computes it
+#   correctly. JSONL-based calculation is only used as a fallback when stdin
+#   omits the field (older versions, edge cases).
+#   Optional: STATUSLINE_DEBUG=1 dumps stdin JSON to /tmp for diagnosis.
 # ---------------------------------------------------------------------------
-ctx_raw=$(printf '%s' "$input" | jq -r '.context_window.used_percentage // 0')
-ctx=$(printf '%s' "$ctx_raw" | awk '{printf "%d", $1}')
+[ -n "$STATUSLINE_DEBUG" ] && printf '%s\n---\n' "$input" >> /tmp/claude_statusline_input.log
+
+ctx_raw=$(printf '%s' "$input" | jq -r '.context_window.used_percentage // empty')
+if [ -n "$ctx_raw" ]; then
+    ctx=$(printf '%s' "$ctx_raw" | awk '{printf "%.0f", $1}')
+else
+    # Fallback: derive from JSONL last assistant usage entry
+    ctx=""
+    transcript=$(printf '%s' "$input" | jq -r '.transcript_path // empty')
+    session_id=$(printf '%s' "$input" | jq -r '.session_id // empty')
+    model_id=$(printf '%s' "$input" | jq -r '.model.id // empty')
+
+    if [ -z "$transcript" ] && [ -n "$session_id" ] && [ -n "$cwd" ]; then
+        sanitized=$(printf '%s' "$cwd" | sed 's|[/.]|-|g')
+        candidate="$HOME/.claude/projects/${sanitized}/${session_id}.jsonl"
+        [ -f "$candidate" ] && transcript="$candidate"
+    fi
+
+    if [ -n "$transcript" ] && [ -f "$transcript" ]; then
+        last_usage_line=$(awk '/"cache_read_input_tokens"/{last=$0} END{print last}' "$transcript")
+        if [ -n "$last_usage_line" ]; then
+            tokens=$(printf '%s' "$last_usage_line" | jq -r '
+                (.message.usage // .usage // null) as $u |
+                if $u then
+                    (($u.input_tokens // 0)
+                      + ($u.cache_creation_input_tokens // 0)
+                      + ($u.cache_read_input_tokens // 0))
+                else empty end
+            ' 2>/dev/null)
+            if [ -n "$tokens" ] && [ "$tokens" -gt 0 ] 2>/dev/null; then
+                case "$model_id" in
+                    *1m*|*-1m-*) limit=1000000 ;;
+                    *)           limit=200000  ;;
+                esac
+                ctx=$(awk -v u="$tokens" -v l="$limit" 'BEGIN{printf "%.0f", u*100/l}')
+            fi
+        fi
+    fi
+
+    [ -z "$ctx" ] && ctx=0
+fi
 
 # ---------------------------------------------------------------------------
 # 5h / 7d usage via Anthropic OAuth API (cached in /tmp)
 # ---------------------------------------------------------------------------
 CACHE_FILE="/tmp/claude_usage_cache.json"
-CACHE_TTL=180   # seconds (3 min)
+CACHE_TTL=90    # seconds (1.5 min)
 LOCK_DIR="/tmp/claude_usage_cache.lock"
 LOCK_STALE=30   # seconds — treat as stale if lock dir is older than this
 
@@ -276,4 +321,3 @@ out="${out} | ${model} | ${ctx}% | 5H:${five_h_pct}%(${five_h_at}) | 7D:${seven_
 [ -n "$extra_segment" ] && out="${out} | ${extra_segment}"
 
 printf '%s\n' "$out"
-
