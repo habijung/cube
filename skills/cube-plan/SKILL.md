@@ -53,14 +53,27 @@ Task ID를 결정하십시오:
 
 ### Step 4 — 계획 수립
 
-수집한 컨텍스트를 바탕으로 **단일 계획 파일(`<task-id>.md`)**의 내용을 작성하십시오. 파일은 4개의 주요 섹션으로 구성됩니다:
+수집한 컨텍스트를 바탕으로 **단일 계획 파일(`<task-id>.md`)**의 내용을 작성하십시오. 파일은 6개의 주요 섹션으로 구성됩니다:
 
 1. **Context** — 프로젝트 컨텍스트 및 기술 스택 스냅샷
 2. **Overview** — 구현 목표와 배경
-3. **Progress & Phases** — 구현 단계별 체크박스 리스트
-4. **Decisions** — 의사결정 기록 테이블
+3. **Implementation Strategy** — 설계 본문 (5개 sub-section)
+   - 3.1 Approach — 핵심 접근법 + 다른 접근과의 트레이드오프
+   - 3.2 Files Affected — 변경 대상 파일 표 (Path / Change / Why)
+   - 3.3 Risks & Mitigations — 위험 요인과 완화 방안
+   - 3.4 Verification — 구체적 명령어 또는 시나리오 + 기대 출력
+   - 3.5 Acceptance Criteria — 완료 기준 체크박스 리스트
+4. **Progress & Phases** — 구현 단계별 체크박스 리스트
+5. **Out of Scope** — 의도적 제외 항목과 그 사유
+6. **Decisions** — 의사결정 기록 테이블
 
 단일 파일의 템플릿은 아래 **File Templates** 섹션을 참조하십시오.
+
+**Strategy 작성 원칙:**
+
+- **Files Affected**: 단일 파일이라도 표로 명시 (Path / Change / Why). 라인 번호는 알려진 경우 포함.
+- **Verification**: "테스트 작성"같은 추상 표현 금지. 실제 실행할 명령어 또는 사람이 검증할 시나리오를 적을 것.
+- **Acceptance Criteria**: 객관적으로 ✅/❌ 판정 가능해야 함. 모호한 기준(e.g. "코드 품질 향상")은 거부.
 
 **사용자에게 계획 초안을 제시하고 승인을 받으십시오.** 승인 전까지 파일을 생성하지 마십시오.
 
@@ -87,18 +100,31 @@ Task ID를 결정하십시오:
 
 `--close <task-id>` 실행 시:
 
-1. `.cube/plans/<task-id>.md`를 읽어 `## 3. Progress & Phases` 내 미완료 항목 확인
-2. **미완료 항목이 있으면** 경고 메시지를 출력하고 사용자 확인을 요청
-3. 사용자 승인 후 다음의 문서 정리(Cleanup & Archive)를 수행하십시오:
-   - **문서 정제 (Refine):** `.cube/plans/<task-id>.md` 내용 중 불필요한 과정(체크리스트 등)을 제외하고, 다음 항목을 포함하여 공식 문서 형태로 요약합니다:
-     - **Overview:** 작업 개요 및 최종 결과
-     - **Technical Details:** 주요 기술적 시도 및 해결 방안 (`Decisions` 기반)
-     - **Known Issues:** 한계점, 남은 버그 또는 추후 과제
-   - **아카이브 보관 (Archive):** 정제된 문서를 영구 보관용 디렉토리(예: `docs/tasks/<task-id>.md` 또는 `CHANGELOG.md` 등 프로젝트 상황에 맞게)에 저장합니다.
+1. `.cube/plans/<task-id>.md`를 읽어 다음 두 가지를 확인하십시오:
+   - `## 4. Progress & Phases` 내 미완료 체크박스
+   - `### 3.5 Acceptance Criteria` 내 미달 항목
+2. **미완료/미달 항목이 있으면** 어느 절의 어느 항목이 미완료인지 명시하여 경고를 출력하고 사용자 확인을 요청하십시오. 사용자가 `status: abandoned`로 종료하기를 원하면 진행, 그 외에는 작업을 중단하십시오.
+3. 사용자 승인 후 다음의 문서 정리(Cleanup & Archive)를 결정적으로 수행하십시오:
+
+   - **문서 정제 (Refine):** 아래 **File Templates** 절의 **Closeout 템플릿**을 그대로 사용하여 새 문서를 작성합니다. 누락 검증을 위해 `<!-- required: ... -->` 주석은 **제거하지 마십시오**.
+     - **YAML frontmatter (6개 필드 모두 필수):**
+       - `task-id`: 원본 task id
+       - `status`: `done` (모두 완료) 또는 `abandoned` (미완료 종료)
+       - `branch`: 작업 브랜치
+       - `created`: 원본 plan에서 추출 (없으면 첫 commit 날짜)
+       - `closed`: 오늘 날짜 (YYYY-MM-DD)
+       - `final-commit`: 현재 HEAD의 단축 hash
+     - **`## 1. Outcome`** — plan §2 Overview 기반 1-2 문단 + Result/Branch/Final Commit 한 줄 요약
+     - **`## 2. Changes Made`** — File / Change / Commit 표. `git log --oneline` 등으로 task-id 관련 커밋을 추출하여 채울 것
+     - **`## 3. Decisions`** — 원본 plan §6 Decisions 표를 그대로 옮기고, close 시점의 추가 결정이 있으면 append
+     - **`## 4. Known Issues & Follow-ups`** — plan §3.3 Risks 중 실현된 항목 + 미달 AC + 후속 작업 제안
+     - **`## 5. Verification Results`** — plan §3.5 Acceptance Criteria 각 항목을 ✅(달성) / ❌(미달) + 검증 방법/결과로 변환
+
+   - **아카이브 보관 (Archive):** `docs/plans/` 디렉토리가 없으면 생성한 후 `docs/plans/<task-id>.md`에 저장합니다. 경로는 **항상 고정**(fallback 없음).
    - **임시 파일 정리 (Cleanup):**
      - `.cube/plans/<task-id>.md` 파일 삭제
      - `.cube/plans/index.md`에서 해당 행 제거 (활성 계획이 0개가 되면 파일 자체 삭제)
-   - Git 커밋: `git add docs/ .cube/ && git commit -m "plan: Close and archive <task-id>"`
+   - Git 커밋: `git add docs/plans/ .cube/ && git commit -m "plan: Close and archive <task-id>"`
 
 ---
 
@@ -129,7 +155,7 @@ Task ID를 결정하십시오:
 ### `<task-id>.md` (단일 계획 파일)
 
 ```markdown
-# Plan: <task-id>
+# Plan: <task-id> — <한 줄 설명>
 
 ## 1. Context
 
@@ -138,17 +164,43 @@ Task ID를 결정하십시오:
 - **Tech Stack:** <언어, 프레임워크, DB 등>
 - **Architecture & Conventions:** <주요 아키텍처 및 코딩 규칙>
 - **Key Commands:** Build: `<명령어>`, Test: `<명령어>`
-- **Relevant Code:** <주요 관련 파일 목록>
+- **Relevant Code:** <기존 코드 이해에 필요한 파일/디렉토리 포인터 (읽기용, §3.2 Files Affected와 별개)>
 - **Recent Commits:**
   - <최근 커밋 3개>
 
 ## 2. Overview
 
-<구현 목표와 배경을 2-3 문단으로 서술>
+<구현 목표와 배경을 2-3 문단으로 서술. 왜 이 작업이 필요한지, 이전 상태와 달라질 결과>
 
 - **References:** <관련 파일, 문서, URL 등>
 
-## 3. Progress & Phases
+## 3. Implementation Strategy
+
+### 3.1 Approach
+
+<핵심 접근법 1-2 문단. 다른 접근과의 트레이드오프 1-2 줄 포함>
+
+### 3.2 Files Affected
+
+| Path     | Change                | Why          |
+| :------- | :-------------------- | :----------- |
+| <path>   | NEW / MODIFY / DELETE | <간단 사유>  |
+
+### 3.3 Risks & Mitigations
+
+- **Risk:** <리스크> → **Mitigation:** <완화 방안>
+
+### 3.4 Verification
+
+- <검증 단계 1: 구체적 명령어 또는 시나리오 + 기대 출력>
+- <검증 단계 2>
+
+### 3.5 Acceptance Criteria
+
+- [ ] <완료 기준 1>
+- [ ] <완료 기준 2>
+
+## 4. Progress & Phases
 
 - **Total:** 0/N tasks
 - **Done:** 0
@@ -168,12 +220,72 @@ Task ID를 결정하십시오:
 
 <계획에 없었으나 개발 중 추가된 작업>
 
-## 4. Decisions
+## 5. Out of Scope
+
+- **<제외 항목 1>:** <왜 의도적으로 제외했는지 + 트레이드오프>
+- **<제외 항목 2>:** <사유>
+
+## 6. Decisions
 
 | #   | Date       | Decision    | Reason | Impact |
 | :-- | :--------- | :---------- | :----- | :----- |
 | 1   | YYYY-MM-DD | <결정 사항> | <사유> | <영향> |
 ```
+
+### `docs/plans/<task-id>.md` (Closeout 템플릿)
+
+`--close` 실행 시 생성되는 영구 아카이브 문서. **YAML frontmatter 6개 필드와 `<!-- required: ... -->` 주석은 모두 보존하십시오.**
+
+```markdown
+---
+task-id: <task-id>
+status: done
+branch: <branch>
+created: YYYY-MM-DD
+closed: YYYY-MM-DD
+final-commit: <hash>
+---
+
+# Plan Closeout: <task-id> — <한 줄 설명>
+
+## 1. Outcome
+<!-- required: 1-paragraph summary, branch, final-commit -->
+
+<달성한 결과를 1-2 문단으로 서술>
+
+- **Result:** <한 줄 요약>
+- **Branch:** <branch>
+- **Final Commit:** `<hash>`
+
+## 2. Changes Made
+<!-- required: file list with commit refs (or commit-by-commit summary) -->
+
+| File   | Change       | Commit   |
+| :----- | :----------- | :------- |
+| <path> | <변경 요약>  | `<hash>` |
+
+## 3. Decisions
+<!-- preserved from plan §6 + any closeout-time additions -->
+
+| #   | Date       | Decision    | Reason | Impact |
+| :-- | :--------- | :---------- | :----- | :----- |
+
+## 4. Known Issues & Follow-ups
+<!-- limitations, deferred items, recommended follow-up plans -->
+
+- **Limitation:** <남은 한계 또는 미달 항목>
+- **Follow-up:** <후속 작업 제안 또는 추천 plan id>
+
+## 5. Verification Results
+<!-- required: each Acceptance Criterion marked ✅/❌ with verification method -->
+
+- ✅ <Acceptance criterion (plan §3.5에서 가져옴)> — <검증 방법/결과>
+- ❌ <달성 못한 AC> — <사유 + close 결정 근거>
+```
+
+> **Note:** `status: abandoned`(미완료 종료) 케이스도 동일 템플릿을 사용합니다. frontmatter `status` 값만 변경하고, §4·§5에 미달 사유와 잔여 작업을 명시하십시오.
+>
+> **Examples:** 활성 plan 형식은 `examples/active-plan.md`, closeout 형식은 `examples/closeout.md` 참조 (skill 디렉토리 기준 상대경로, 동일 task-id 쌍).
 
 ---
 
@@ -187,4 +299,4 @@ Task ID를 결정하십시오:
 
 ---
 
-**Updated At:** 2026. 4. 11.
+**Updated At:** 2026. 4. 29.

@@ -1,6 +1,6 @@
-# Plan: agents-directory
+# Plan: example-agents-directory — 에이전트 전용 리소스 통합 관리
 
-> **EXAMPLE** — 이 문서는 `cube-plan` 스킬의 출력 형식 예시입니다. 실제 작업 문서가 아닙니다.
+> **EXAMPLE** — 이 문서는 `cube-plan` 스킬의 **활성 plan** 형식 예시입니다. 실제 작업 문서가 아닙니다. close 후 형식은 `examples/closeout.md` 참조.
 
 ## 1. Context
 
@@ -12,7 +12,7 @@
   - 배포 대상 경로 미러링 구조 (`agents/` 하위)
   - 스킬 네이밍 (`cube-` prefix), Conventional Commits (feat/fix/refactor/plan)
 - **Key Commands:** Install: `bash ./scripts/install.sh [agents...]`, Diagnose: `bash ./scripts/install.sh --check`
-- **Relevant Code:** `scripts/install.sh`, `agents/claude/claude-status-line.sh`, `agents/opencode/plugins/cmux-notify.js`
+- **Relevant Code:** `scripts/install.sh`, `~/.config/opencode/plugins/`, `~/.claude/`
 - **Recent Commits:**
   - `aa399d5` feat: Add OpenCode cmux notification plugin with install support
   - `2c45388` refactor: Introduce agents/ directory for agent-specific resources
@@ -26,7 +26,45 @@
 
 - **References:** `scripts/install.sh`, `agents/` 디렉토리 구조
 
-## 3. Progress & Phases
+## 3. Implementation Strategy
+
+### 3.1 Approach
+
+배포 대상 경로(`~/.claude/`, `~/.config/opencode/`)의 구조를 cube 저장소 내 `agents/<agent>/` 하위에 그대로 미러링한다. 이 방식은 (a) `plugins/<agent>/`처럼 타입 우선 구조보다 직관적이고, (b) `install.sh` 유지보수가 간단하며, (c) 새 에이전트 추가 시 디렉토리만 추가하면 되어 확장성이 좋다.
+
+기존 원본 파일은 삭제 후 심볼릭 링크로 교체하여 cube 저장소가 유일한 원본(single source of truth)이 되도록 한다.
+
+### 3.2 Files Affected
+
+| Path                                          | Change | Why                                              |
+| :-------------------------------------------- | :----- | :----------------------------------------------- |
+| `agents/claude/claude-status-line.sh`         | NEW    | `scripts/`에서 이동 (배포 경로 미러링)           |
+| `scripts/claude-status-line.sh`               | DELETE | 위 이동에 따른 정리                              |
+| `agents/opencode/plugins/cmux-notify.js`      | NEW    | OpenCode tmux 알림 플러그인 통합                 |
+| `scripts/install.sh`                          | MODIFY | agents/ 하위 자원의 symlink 생성·진단 로직 추가  |
+| `CLAUDE.md`                                   | MODIFY | `agents/` 디렉토리 설명 추가                     |
+
+### 3.3 Risks & Mitigations
+
+- **Risk:** 기존 사용자의 `~/.claude/claude-status-line.sh` 심볼릭 링크가 깨짐 → **Mitigation:** `install.sh --check`에서 구 경로 감지 시 안내 메시지 출력
+- **Risk:** OpenCode 플러그인 디렉토리가 없는 환경에서 install 실패 → **Mitigation:** 디렉토리 자동 생성 후 symlink 생성
+- **Risk:** 외부에 흩어진 원본 파일 삭제로 데이터 손실 → **Mitigation:** symlink 교체 전 파일 내용을 cube 저장소로 먼저 복사하고 commit, 검증 후 삭제
+
+### 3.4 Verification
+
+- `bash ./scripts/install.sh --check` 실행 → 모든 agent 자원이 "OK"로 표시되는지 확인
+- `bash ./scripts/install.sh opencode` 실행 → `~/.config/opencode/plugins/cmux-notify.js`가 cube 저장소를 가리키는 symlink인지 `ls -l`로 확인
+- `~/.claude/claude-status-line.sh`가 `agents/claude/claude-status-line.sh`를 가리키는지 확인
+- Claude Code 재시작 후 status-line이 정상 표시되는지 확인
+
+### 3.5 Acceptance Criteria
+
+- [x] 모든 agent 전용 자원이 `agents/<agent>/` 하위에 배치됨
+- [x] `install.sh`가 `agents/` 하위 자원의 symlink를 자동 생성함
+- [x] `install.sh --check`가 새 구조를 진단함
+- [x] 기존 외부 원본 파일이 정리되고 cube 저장소가 single source of truth임
+
+## 4. Progress & Phases
 
 - **Total:** 11/11 tasks
 - **Done:** 11
@@ -56,7 +94,13 @@
 
 (없음)
 
-## 4. Decisions
+## 5. Out of Scope
+
+- **`scripts/install.sh`와 `cube.sh` 자체의 위치 변경:** 두 파일은 성격이 다름 — `cube.sh`는 쉘 source 설정, `install.sh`는 도구. 기존 경로 유지로 하위 호환성 보장.
+- **Gemini CLI 자원 통합:** 본 작업은 Claude/OpenCode에 집중. Gemini CLI 자원이 추가될 때 동일 구조(`agents/gemini/`)로 별도 plan에서 다룬다.
+- **다른 에이전트 자원의 자동 발견 로직:** `agents/` 하위를 자동 스캔하여 install하는 동적 로직은 복잡도 대비 이점이 작음 — 명시적 case-by-case로 유지.
+
+## 6. Decisions
 
 | #   | Date       | Decision                                   | Reason                                                              | Impact                                    |
 | :-- | :--------- | :----------------------------------------- | :------------------------------------------------------------------ | :---------------------------------------- |
