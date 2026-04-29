@@ -1,3 +1,10 @@
+---
+task-id: example-agents-directory
+status: active
+branch: main
+created: 2026-04-09
+---
+
 # Plan: example-agents-directory — 에이전트 전용 리소스 통합 관리
 
 > **EXAMPLE** — 이 문서는 `cube-plan` 스킬의 **활성 plan** 형식 예시입니다. 실제 작업 문서가 아닙니다. close 후 형식은 `examples/closeout.md` 참조.

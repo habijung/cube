@@ -53,7 +53,16 @@ Task ID를 결정하십시오:
 
 ### Step 4 — 계획 수립
 
-수집한 컨텍스트를 바탕으로 **단일 계획 파일(`<task-id>.md`)**의 내용을 작성하십시오. 파일은 6개의 주요 섹션으로 구성됩니다:
+수집한 컨텍스트를 바탕으로 **단일 계획 파일(`<task-id>.md`)**의 내용을 작성하십시오. 파일은 YAML frontmatter와 6개의 주요 섹션으로 구성됩니다.
+
+**YAML frontmatter (4개 필드 모두 필수):**
+
+- `task-id`: Step 2에서 결정한 task id
+- `status`: 항상 `active`로 시작 (close 시 `done` 또는 `abandoned`로 전이)
+- `branch`: 작업 브랜치 (Step 3에서 수집)
+- `created`: 생성 날짜 (YYYY-MM-DD)
+
+**섹션:**
 
 1. **Context** — 프로젝트 컨텍스트 및 기술 스택 스냅샷
 2. **Overview** — 구현 목표와 배경
@@ -107,11 +116,7 @@ Task ID를 결정하십시오:
 3. 사용자 승인 후 다음의 문서 정리(Cleanup & Archive)를 결정적으로 수행하십시오:
 
    - **문서 정제 (Refine):** 아래 **File Templates** 절의 **Closeout 템플릿**을 그대로 사용하여 새 문서를 작성합니다. 누락 검증을 위해 `<!-- required: ... -->` 주석은 **제거하지 마십시오**.
-     - **YAML frontmatter (6개 필드 모두 필수):**
-       - `task-id`: 원본 task id
-       - `status`: `done` (모두 완료) 또는 `abandoned` (미완료 종료)
-       - `branch`: 작업 브랜치
-       - `created`: 원본 plan에서 추출 (없으면 첫 commit 날짜)
+     - **YAML frontmatter 전이 (4 → 6 필드):** 원본 plan의 frontmatter 4개 필드(`task-id`, `status`, `branch`, `created`)를 보존하되 `status`를 `active`에서 `done`(모두 완료) 또는 `abandoned`(미완료 종료)로 변경하고, 다음 2개 필드를 추가하십시오:
        - `closed`: 오늘 날짜 (YYYY-MM-DD)
        - `final-commit`: 현재 HEAD의 단축 hash
      - **`## 1. Outcome`** — plan §2 Overview 기반 1-2 문단 + Result/Branch/Final Commit 한 줄 요약
@@ -154,7 +159,16 @@ Task ID를 결정하십시오:
 
 ### `<task-id>.md` (단일 계획 파일)
 
+활성 plan 문서. **YAML frontmatter 4개 필드는 모두 필수**이며, close 시 `status` 변경과 `closed`/`final-commit` 필드 추가로 closeout 문서로 전이됩니다.
+
 ```markdown
+---
+task-id: <task-id>
+status: active
+branch: <branch>
+created: YYYY-MM-DD
+---
+
 # Plan: <task-id> — <한 줄 설명>
 
 ## 1. Context
