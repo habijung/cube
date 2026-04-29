@@ -1,7 +1,7 @@
 ---
 name: cube-review
 description: 코드 리뷰를 수행합니다. 기본적으로 git diff HEAD를 분석하며, 파일 경로, 특정 커밋 해시, 커밋 범위를 인자로 지정할 수도 있습니다. trigger: /cube-review, code review, review, 코드 리뷰, 리뷰해줘, 커밋 전 확인
-argument-hint: "[파일 경로 | <hash> | <hash>..<hash>] [--light] [--clear]"
+argument-hint: "[파일 경로 | <hash> | <hash>..<hash>] [--heavy] [--clear]"
 disable-model-invocation: false # 슬래시 명령 및 AI 의도 감지 모두 허용
 allowed-tools: Read, Grep, Bash, Task
 compatibility: opencode, claude, gemini
@@ -14,11 +14,11 @@ compatibility: opencode, claude, gemini
 ## 사용법
 
 ```bash
-/cube-review                       # 기본: git diff HEAD 전체 리뷰 (모델 전략 표 참고)
+/cube-review                       # 기본: git diff HEAD 전체 리뷰 (Sonnet sub-agents)
 /cube-review src/Foo.m             # 특정 파일 리뷰
 /cube-review abc1234               # 특정 커밋 리뷰
 /cube-review abc1234..def5678      # 커밋 범위 리뷰
-/cube-review --light               # 경량 모델 사용 (모델 전략 표 참고)
+/cube-review --heavy               # Opus sub-agents 사용 (미묘한 버그 예상 시)
 /cube-review --clear               # .cube/review.md 초기화 후 리뷰
 ```
 
@@ -38,7 +38,7 @@ compatibility: opencode, claude, gemini
 
 다음 정보를 수집하십시오:
 
-1. **플래그 파악:** `--light`, `--clear` 유무를 기록하십시오.
+1. **플래그 파악:** `--heavy`, `--clear` 유무를 기록하십시오.
 2. **인자 타입 감지:** 플래그를 제외한 첫 번째 인자를 분석하여 리뷰 모드를 결정하십시오.
 
    | 조건                                    | 모드      | diff 명령어                              |
@@ -57,7 +57,18 @@ compatibility: opencode, claude, gemini
    - 커밋 범위 모드: 양 끝 해시 각각 short resolve → `range: <start>..<end>`
 6. 현재 디렉토리에서 AI 컨벤션 파일(`AGENTS.md`, `CLAUDE.md`, `GEMINI.md` 등)이 있으면 경로를 기록하십시오. 단, 동일 파일을 가리키는 symlink는 한 번만 전달합니다 (realpath 기반 dedup) — Step 2에서 리뷰 에이전트에게 컨텍스트로 전달합니다.
 7. `--clear` 플래그 유무를 기록하십시오. 삭제는 Step 3 저장 직전에 수행합니다.
-8. **Large diff 분할:** diff가 3000줄을 초과하면, 변경된 파일 목록을 기준으로 파일 단위로 분할하여 각 에이전트에게 전달하십시오. 단일 파일이 3000줄을 초과하는 경우에는 분할 없이 그대로 전달하되, 에이전트에게 핵심 변경 로직에 집중하도록 지시하십시오.
+8. **Large diff 분할 (token efficiency):** diff가 1500줄을 초과하면 다음 절차로 부분 집합 A·B에 분배하십시오.
+
+   1. **공용 헤더 식별 (양쪽 공통 전달):** `*Define.h`, `*Models.h`, `*Constants.h` 등 enum/타입/상수를 정의하는 헤더 파일은 분할 대상에서 제외하고 양쪽 에이전트 모두에게 전달합니다 (cross-file 네이밍·미러링 패턴 감지 보존).
+   2. **prefix 그룹핑:** 같은 디렉토리 prefix를 공유하는 파일은 하나의 그룹으로 묶습니다 (예: `RVmacRXViewerDisplay/**`는 한 그룹, Sender/Receiver 짝은 함께).
+   3. **Greedy bin-packing:** 그룹 단위로 줄 수 합계가 균등해지도록 A·B 두 부분 집합에 분배합니다.
+   4. **분배:**
+      - **Agent 1**에게 `(A의 diff + A의 파일 목록 + 공용 헤더)` 전달.
+      - **Agent 2**에게 `(B의 diff + B의 파일 목록 + 공용 헤더)` 전달.
+      - **양쪽에 동일한 부분 집합을 전달하지 마십시오.** 양쪽 전달 시 분할 효과가 0이 됩니다.
+   5. **단일 파일 예외:** 단일 파일이 1500줄을 초과하는 경우에는 분할하지 않고 그대로 전달하되, 에이전트에게 핵심 변경 로직에 집중하도록 지시하십시오.
+
+   > Rationale: 4점 측정에서 분기는 트리거됐으나 분배 누락으로 비용이 $8.55까지 상승(M8 케이스). 부분 집합 명시 분배 + 공용 헤더 broadcast로 토큰 ~40% 감소를 노립니다.
 9. **`.cube/` 초기화:** `.cube/` 디렉토리가 없으면 생성하고, `.cube/.gitignore`가 없으면 다음 내용으로 생성하십시오:
 
    ```gitignore
@@ -79,13 +90,16 @@ compatibility: opencode, claude, gemini
 | Gemini CLI   | `generalist`  | `generalist(request: string)`                        |
 
 > 호스트가 sub-agent 도구를 제공하지 않는 경우에 한해 메인 에이전트가 두 reviewer 체크리스트를 순차 수행하십시오. 단, sub-agent 도구가 등록되어 있으면 **반드시 호출을 시도**하고, **실제 에러가 발생한 경우에만 fallback을 발동**합니다. 사전 추측이나 사용자 컨텍스트 기반 자가 판단으로 fallback을 발동하지 마십시오.
-
-> Claude Code의 `Task` 호출 시 `model` 결정 로직:
-> - `--light` 없음 → `model` 미명시 (부모 세션 모델 상속)
-> - `--light` 있음 + 부모 Opus 계열 → `model: "sonnet"` 명시
-> - `--light` 있음 + 부모 Sonnet/Haiku 계열 → `model` 미명시 (부모 상속)
 >
-> 정책: `--light` = `min(부모, sonnet)` — Opus만 Sonnet으로 다운시프트하고, Sonnet/Haiku 세션은 그대로. Haiku로 자동 진입하지 않습니다.
+> Claude Code의 `Task` 호출 시 `model` 결정 로직:
+>
+> - `--heavy` 없음 (기본) → `model: "sonnet"` 명시 (부모 모델 무관)
+> - `--heavy` 있음 → `model: "opus"` 명시 (부모 모델 무관)
+>
+> 정책: 코드 리뷰는 패턴 매칭 비중이 높아 Sonnet 4.6으로 충분합니다. Opus 4.7 단가는 ~5× 비싸므로 기본은 Sonnet, 매우 미묘한 동시성/논리 버그가 예상되는 케이스에 한해 `--heavy`로 Opus opt-in.
+> Sonnet 환경에서 호출되어도 동일하게 Sonnet 명시 (cross-host 일관성).
+>
+> Rationale: viewer repo 4점 측정에서 Opus×2 dual-agent 비용이 $8.55까지 도달. Sonnet 강제로 ~75% 단가 절감.
 
 각 에이전트에게 전달하는 프롬프트의 **맨 첫 줄에 반드시** 다음 문장을 포함하십시오 (anti-bias):
 
@@ -93,8 +107,8 @@ compatibility: opencode, claude, gemini
 
 이어서 각 에이전트에게 다음 정보를 전달하십시오:
 
-- Step 1에서 수집한 diff 전문 (모드에 따라 워킹트리 / 파일 / 단일 커밋 / 범위 누적 diff)
-- 변경된 파일 목록
+- 해당 에이전트에게 할당된 diff (Step 1-8에서 분할된 경우 부분 집합 A 또는 B + 공용 헤더 diff; 분할되지 않은 경우 diff 전문)
+- 해당 에이전트에게 할당된 변경 파일 목록 (분할 시 부분 집합 + 공용 헤더 파일 목록)
 - 프로젝트 루트 경로
 - AI 컨벤션 파일 경로 (있을 경우, symlink dedup 후)
 - 해당 에이전트의 체크리스트 (아래 "Agent 1" 또는 "Agent 2" 섹션 전체)
@@ -113,8 +127,6 @@ compatibility: opencode, claude, gemini
 - 컴파일러/린터가 처리할 수 있는 타입 오류, 임포트 누락
 - 의도적인 변경으로 보이는 동작 차이
 - 이미 주석으로 무시된 이슈
-
-`--light` 플래그: 경량 모델 사용. 호스트별 매핑은 아래 "모델 전략" 표 참고.
 
 #### Agent 1 — 버그 & 아키텍처
 
@@ -220,14 +232,14 @@ No issues found. Checked bugs, architecture, naming, and project AI convention f
 
 ## 모델 전략
 
-| 환경     | 기본                    | `--light`                          |
-| -------- | :---------------------- | :--------------------------------- |
-| Claude   | 호스트 세션 모델 (상속)  | Opus만 Sonnet으로 다운, 그 외 상속    |
-| OpenCode | 호스트 설정 기본         | 호스트 설정 light                   |
-| Gemini   | Pro                     | Flash                              |
+| 환경     | 기본 (sub-agent)      | `--heavy`                                                  |
+| -------- | :-------------------- | :--------------------------------------------------------- |
+| Claude   | Sonnet 4.6            | Opus 4.7                                                   |
+| OpenCode | 호스트 mid-tier 기본   | 호스트 premium tier                                         |
+| Gemini   | Pro                   | Pro (Gemini는 Pro가 최상위 — `--heavy`는 no-op + warning)    |
 
-> 회사 환경 등 Pro 미가용 시에는 Flash로 자동 fallback. Flash 모델로도 핵심 보안·크래시 이슈에 대한 객관 판정이 가능합니다.
+> 코드 리뷰는 패턴 매칭 비중이 높아 Sonnet 4.6으로 충분합니다. 회사 환경 등 Pro 미가용 시에는 Flash로 자동 fallback. Flash 모델로도 핵심 보안·크래시 이슈에 대한 객관 판정이 가능합니다.
 
 ---
 
-**Updated At:** 2026. 4. 27.
+**Updated At:** 2026. 4. 29.
