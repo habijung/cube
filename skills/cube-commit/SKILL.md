@@ -27,7 +27,8 @@ compatibility: opencode, claude, gemini
      - **관련 없음:** 다른 작업(별도 Agent 또는 작업 흐름)에 속하는 파일 → 스테이징 제외
      - Step 5 제안 시 분류 결과를 명시하고, `git add <file1> <file2> ...` 형태로 파일을 명시적으로 지정하여 승인을 받으세요.
    - 커밋 메시지는 '무엇을(what)' 했는지보다는 '왜(why)' 했는지에 초점을 맞춥니다. (Conventional Commits 스타일)
-5. **Proposal & Approval Request:** 파악된 작업 맥락, 파일 상태 요약, 그리고 커밋 메시지 초안을 아래 형식으로 한 번에 제시하여 승인을 요청하세요. 사용자가 명시적으로 승인(예: "진행해줘", "OK")하기 전까지는 절대 커밋을 실행하지 마세요.
+   - **Context Independence:** 메시지는 현재 세션/대화 맥락 없이도 독립적으로 이해되어야 합니다. `Phase`, `이전/다음 작업`, `앞서 논의한 대로` 같은 세션 의존적 표현을 사용하지 마세요. (자세한 금지 표현은 `Commit Message Rules` 7번 참고)
+5. **Proposal & Approval Request:** 파악된 작업 맥락, 파일 상태 요약, 그리고 커밋 메시지 초안을 아래 형식으로 한 번에 제시하여 승인을 요청하세요. 사용자가 명시적으로 승인(예: "진행해줘", "OK")하기 전까지는 절대 커밋을 실행하지 마세요. **제시 직전, 작성된 메시지에 `Commit Message Rules` 7번이 금지하는 컨텍스트 의존적 표현이 포함되지 않았는지 self-check 후 필요 시 재작성하세요.**
 
    ```text
    ### 💡 작업 맥락 요약
@@ -71,6 +72,14 @@ compatibility: opencode, claude, gemini
 4. **Subject에 대상 명시 (선택)**: 변경 대상이 명확할 경우 `in <파일명>` 또는 `of <컴포넌트>` 형태로 subject에 포함 가능.
 5. **Description 리스트 포맷팅**: Description을 작성할 때 여러 개의 리스트 항목(bullet point)을 나열하는 경우, 각 항목 사이에 절대 빈 줄(Empty Line)을 추가하지 마십시오. 항목들은 연속된 줄에 작성되어야 합니다.
 6. **본문 생략의 원칙**: 제목(Subject)만으로 변경의 의도와 내용이 명확히 전달되는 경우, 본문(Description)은 과감히 생략하고 제목만으로 커밋 메시지를 생성하십시오.
+7. **컨텍스트 독립성 (Context Independence)**: 커밋 메시지는 현재 작업 세션/대화 맥락 없이 `git log`만 봤을 때도 독립적으로 이해되어야 합니다. 다음과 같은 세션 의존적 표현을 절대 사용하지 마십시오.
+   - **단계/Phase 참조:** `Phase N에서는...`, `Step 2 작업으로...`, `다음 단계로...`
+   - **과거 작업 참조:** `이전 작업에서...`, `지난 커밋에서...`, `앞서 논의한 대로...`
+   - **미래 계획 참조:** `차후에 수정 예정`, `나중에 처리할...`, `다음 PR에서는...`
+
+   대신 변경 자체의 **의도(Why)**와 **결과(Outcome)**만 절대적 표현으로 기술하십시오.
+   - ❌ `Phase 2에서는 이를 API로 노출하기 위한 사전 작업으로 모듈을 분리`
+   - ✅ `재사용성 확보를 위해 모듈 분리 — 외부 API 노출의 사전 단계로 활용 가능`
 
 ### Example
 
@@ -81,6 +90,26 @@ feat: Add dark mode support in ThemeManager
 - Improve visual accessibility by aligning with system appearance settings
 ```
 
+#### 컨텍스트 의존성 비교 (Rule 7 참고)
+
+❌ **Bad** — 세션 맥락이 없으면 의미 불명:
+
+```markdown
+refactor: Split ThemeManager module
+
+- Phase 2에서 다크모드 토글 API를 노출하기 위한 사전 작업
+- 이전에 논의한 대로 ThemeStore와 ThemeView를 분리
+```
+
+✅ **Good** — 독립적으로 이해 가능:
+
+```markdown
+refactor: Split ThemeManager into store and view layers
+
+- Decouple state persistence from rendering for independent testing
+- Enable future extension points without modifying view layer
+```
+
 ---
 
-**Updated At:** 2026. 4. 25.
+**Updated At:** 2026. 4. 29.
