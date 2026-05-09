@@ -113,6 +113,25 @@ check_installation() {
     [[ ! " ${missing_agents[@]} " =~ " claude " ]] && missing_agents+=("claude")
   fi
 
+  # 3b. Claude settings.json statusLine check
+  local claude_settings="$HOME/.claude/settings.json"
+  if [[ -f "$claude_settings" ]]; then
+    if python3 -c "
+import sys, json
+try:
+    c = json.load(open('$claude_settings'))
+    sl = c.get('statusLine', {})
+    sys.exit(0 if sl.get('type') == 'command' and 'claude-status-line.sh' in sl.get('command', '') else 1)
+except Exception: sys.exit(1)
+" 2>/dev/null; then
+      echo "   - ✅ settings.json statusLine: Configured"
+    else
+      echo "   - ⚠️  settings.json statusLine: Not configured"
+    fi
+  else
+    echo "   - ⚠️  [Claude] settings.json not found. Run 'claude' CLI first."
+  fi
+
   # 4. OpenCode specific plugins check
   local plugins_src="$CUBE_PATH/agents/opencode/plugins"
   local plugins_dest="$HOME/.config/opencode/plugins"
@@ -201,8 +220,44 @@ if [[ " ${AGENTS[@]} " =~ " claude " ]]; then
     echo "✨ Creating symlink for claude-status-line.sh..."
     ln -sf "$STATUSLINE_SRC" "$STATUSLINE_DEST"
     echo "✅ Symlinked: $STATUSLINE_DEST → $STATUSLINE_SRC"
-    echo "📝 Add the following to ~/.claude/settings.json:"
-    echo '   "statusLine": { "type": "command", "command": "bash ~/.claude/claude-status-line.sh" }'
+  fi
+
+  # Claude settings.json statusLine 자동 설정
+  CLAUDE_SETTINGS="$HOME/.claude/settings.json"
+  STATUSLINE_CMD="$HOME/.claude/claude-status-line.sh"
+
+  if [[ -f "$CLAUDE_SETTINGS" ]]; then
+    if python3 -c "
+import sys, json
+try:
+    c = json.load(open('$CLAUDE_SETTINGS'))
+    sl = c.get('statusLine', {})
+    sys.exit(0 if sl.get('type') == 'command' and 'claude-status-line.sh' in sl.get('command', '') else 1)
+except Exception: sys.exit(1)
+" 2>/dev/null; then
+      echo "✅ [Claude] statusLine is already configured in settings.json."
+    else
+      echo "⚠️  [Claude] statusLine is not configured in settings.json."
+      read -p "   Do you want to add it now? (y/n): " enable_statusline
+      if [[ "$enable_statusline" =~ ^[Yy]$ ]]; then
+        python3 -c "
+import sys, json
+p = '$CLAUDE_SETTINGS'
+try:
+    c = json.load(open(p))
+except:
+    c = {}
+c['statusLine'] = {'type': 'command', 'command': '$STATUSLINE_CMD'}
+json.dump(c, open(p, 'w'), indent=2)
+print('✅ [Claude] statusLine added to settings.json.')
+"
+      else
+        echo "ℹ️  Skipped. Add manually:"
+        echo '   "statusLine": { "type": "command", "command": "~/.claude/claude-status-line.sh" }'
+      fi
+    fi
+  else
+    echo "⚠️  [Claude] settings.json not found. Run 'claude' CLI first to generate it."
   fi
 fi
 
