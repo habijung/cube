@@ -1,6 +1,11 @@
 ---
 name: cube-plan-dev
-description: 기존 계획을 로드하여 개발을 이어갑니다. trigger: /cube-plan-dev, 계획 이어가기, 이어서 개발, start development
+description: 기존 계획을 로드하여 개발을 이어갑니다.
+trigger:
+  - /cube-plan-dev
+  - 계획 이어가기
+  - 이어서 개발
+  - start development
 argument-hint: "[task-id]"
 disable-model-invocation: false
 allowed-tools: Bash, Read, Write, Grep, Task

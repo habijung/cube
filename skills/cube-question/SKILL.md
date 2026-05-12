@@ -1,6 +1,11 @@
 ---
 name: cube-question
-description: 코드에 대한 질문을 하면 그에 대한 답을 설명합니다. 코드를 수정하지 않습니다. trigger: /cube-question, 질문, 코드 질문, explain
+description: 코드에 대한 질문을 하면 그에 대한 답을 설명합니다. 코드를 수정하지 않습니다.
+trigger:
+  - /cube-question
+  - 질문
+  - 코드 질문
+  - explain
 argument-hint: "[질문1] [질문2] [질문3] ..."
 disable-model-invocation: false # Claude, User 모두 사용 가능
 allowed-tools: Task, Read

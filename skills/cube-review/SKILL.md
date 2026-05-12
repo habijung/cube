@@ -1,6 +1,15 @@
 ---
 name: cube-review
-description: 코드 리뷰를 수행합니다. 기본적으로 git diff HEAD를 분석하며, 파일 경로, 특정 커밋 해시, 커밋 범위를 인자로 지정할 수도 있습니다. trigger: /cube-review, code review, review, 코드 리뷰, 리뷰해줘, 커밋 전 확인
+description: >-
+  코드 리뷰를 수행합니다. 기본적으로 git diff HEAD를 분석하며,
+  파일 경로, 특정 커밋 해시, 커밋 범위를 인자로 지정할 수도 있습니다.
+trigger:
+  - /cube-review
+  - code review
+  - review
+  - 코드 리뷰
+  - 리뷰해줘
+  - 커밋 전 확인
 argument-hint: "[파일 경로 | <hash> | <hash>..<hash>] [--heavy] [--clear]"
 disable-model-invocation: false # 슬래시 명령 및 AI 의도 감지 모두 허용
 allowed-tools: Read, Grep, Bash, Task

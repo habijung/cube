@@ -1,6 +1,9 @@
 ---
 name: cube-summary
-description: 현재 대화 세션의 진행 상황을 요약하고, 새 세션에서 컨텍스트를 복구할 수 있는 프롬프트를 생성합니다. trigger: /cube-summary, 요약해줘
+description: 현재 대화 세션의 진행 상황을 요약하고, 새 세션에서 컨텍스트를 복구할 수 있는 프롬프트를 생성합니다.
+trigger:
+  - /cube-summary
+  - 요약해줘
 argument-hint: "[--copy] [--web]"
 disable-model-invocation: false # Claude, User 모두 사용 가능
 allowed-tools: Read, Write, Bash

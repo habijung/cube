@@ -1,6 +1,10 @@
 ---
 name: cube-plan
-description: 구현 계획을 수립하고 .cube/plans/ 디렉토리에 저장합니다. trigger: /cube-plan, 계획 세워줘, plan
+description: 구현 계획을 수립하고 .cube/plans/ 디렉토리에 저장합니다.
+trigger:
+  - /cube-plan
+  - 계획 세워줘
+  - plan
 argument-hint: "[task-id] \"설명\" [--list] [--close task-id]"
 disable-model-invocation: false
 allowed-tools: Bash, Read, Grep
