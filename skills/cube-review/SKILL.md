@@ -50,12 +50,12 @@ compatibility: opencode, claude, gemini
 1. **플래그 파악:** `--heavy`, `--clear` 유무를 기록하십시오.
 2. **인자 타입 감지:** 플래그를 제외한 첫 번째 인자를 분석하여 리뷰 모드를 결정하십시오.
 
-   | 조건                                    | 모드      | diff 명령어                              |
-   | --------------------------------------- | --------- | ---------------------------------------- |
-   | 인자 없음                               | 워킹트리  | `git diff HEAD`                          |
-   | 인자가 `..` 포함 (예: abc123..def456)  | 커밋 범위 | `git diff <start>..<end>`                |
-   | 인자가 16진수 7~40자 (예: abc1234)     | 단일 커밋 | `git show <hash>`                        |
-   | 그 외 (예: src/Foo.m)                  | 파일 경로 | `git diff HEAD -- <파일 경로>`           |
+   | 조건                                  | 모드      | diff 명령어                    |
+   | ------------------------------------- | --------- | ------------------------------ |
+   | 인자 없음                             | 워킹트리  | `git diff HEAD`                |
+   | 인자가 `..` 포함 (예: abc123..def456) | 커밋 범위 | `git diff <start>..<end>`      |
+   | 인자가 16진수 7~40자 (예: abc1234)    | 단일 커밋 | `git show <hash>`              |
+   | 그 외 (예: src/Foo.m)                 | 파일 경로 | `git diff HEAD -- <파일 경로>` |
 
 3. **변경사항 수집:** 위 모드에 맞는 diff 명령어를 실행하십시오.
    - 커밋 범위 모드는 `git diff <start>..<end>` 로 start~end 사이 모든 변경을 누적한 단일 diff를 수집합니다.
@@ -67,7 +67,6 @@ compatibility: opencode, claude, gemini
 6. 현재 디렉토리에서 AI 컨벤션 파일(`AGENTS.md`, `CLAUDE.md`, `GEMINI.md` 등)이 있으면 경로를 기록하십시오. 단, 동일 파일을 가리키는 symlink는 한 번만 전달합니다 (realpath 기반 dedup) — Step 2에서 리뷰 에이전트에게 컨텍스트로 전달합니다.
 7. `--clear` 플래그 유무를 기록하십시오. 삭제는 Step 3 저장 직전에 수행합니다.
 8. **Large diff 분할 (token efficiency):** diff가 1500줄을 초과하면 다음 절차로 부분 집합 A·B에 분배하십시오.
-
    1. **공용 헤더 식별 (양쪽 공통 전달):** `*Define.h`, `*Models.h`, `*Constants.h` 등 enum/타입/상수를 정의하는 헤더 파일은 분할 대상에서 제외하고 양쪽 에이전트 모두에게 전달합니다 (cross-file 네이밍·미러링 패턴 감지 보존).
    2. **prefix 그룹핑:** 같은 디렉토리 prefix를 공유하는 파일은 하나의 그룹으로 묶습니다 (예: `RVmacRXViewerDisplay/**`는 한 그룹, Sender/Receiver 짝은 함께).
    3. **Greedy bin-packing:** 그룹 단위로 줄 수 합계가 균등해지도록 A·B 두 부분 집합에 분배합니다.
@@ -78,6 +77,7 @@ compatibility: opencode, claude, gemini
    5. **단일 파일 예외:** 단일 파일이 1500줄을 초과하는 경우에는 분할하지 않고 그대로 전달하되, 에이전트에게 핵심 변경 로직에 집중하도록 지시하십시오.
 
    > Rationale: 4점 측정에서 분기는 트리거됐으나 분배 누락으로 비용이 $8.55까지 상승(M8 케이스). 부분 집합 명시 분배 + 공용 헤더 broadcast로 토큰 ~40% 감소를 노립니다.
+
 9. **`.cube/` 초기화:** `.cube/` 디렉토리가 없으면 생성하고, `.cube/.gitignore`가 없으면 다음 내용으로 생성하십시오:
 
    ```gitignore
@@ -92,11 +92,11 @@ compatibility: opencode, claude, gemini
 
 호스트가 제공하는 sub-agent 도구로 Agent 1과 Agent 2를 **각각 별개의 sub-agent 호출로 dispatch하십시오. 단일 sub-agent 호출에 두 체크리스트를 통합하는 것은 금지합니다.** 두 호출은 단일 메시지에서 동시에 실행하고, 가능하면 병렬/background 옵션을 사용하십시오.
 
-| 호스트       | 도구명        | 호출 형식                                            |
-| ------------ | ------------- | ---------------------------------------------------- |
-| Claude Code  | `Task`        | `subagent_type: general-purpose`, `background: true` |
-| OpenCode     | `task`        | `subagent_type: <호스트에 등록된 generalist 계열>`     |
-| Gemini CLI   | `generalist`  | `generalist(request: string)`                        |
+| 호스트      | 도구명       | 호출 형식                                            |
+| ----------- | ------------ | ---------------------------------------------------- |
+| Claude Code | `Task`       | `subagent_type: general-purpose`, `background: true` |
+| OpenCode    | `task`       | `subagent_type: <호스트에 등록된 generalist 계열>`   |
+| Gemini CLI  | `generalist` | `generalist(request: string)`                        |
 
 > 호스트가 sub-agent 도구를 제공하지 않는 경우에 한해 메인 에이전트가 두 reviewer 체크리스트를 순차 수행하십시오. 단, sub-agent 도구가 등록되어 있으면 **반드시 호출을 시도**하고, **실제 에러가 발생한 경우에만 fallback을 발동**합니다. 사전 추측이나 사용자 컨텍스트 기반 자가 판단으로 fallback을 발동하지 마십시오.
 >
@@ -241,11 +241,11 @@ No issues found. Checked bugs, architecture, naming, and project AI convention f
 
 ## 모델 전략
 
-| 환경     | 기본 (sub-agent)      | `--heavy`                                                  |
-| -------- | :-------------------- | :--------------------------------------------------------- |
-| Claude   | Sonnet 4.6            | Opus 4.7                                                   |
-| OpenCode | 호스트 mid-tier 기본   | 호스트 premium tier                                         |
-| Gemini   | Pro                   | Pro (Gemini는 Pro가 최상위 — `--heavy`는 no-op + warning)    |
+| 환경     | 기본 (sub-agent)     | `--heavy`                                                 |
+| -------- | :------------------- | :-------------------------------------------------------- |
+| Claude   | Sonnet 4.6           | Opus 4.7                                                  |
+| OpenCode | 호스트 mid-tier 기본 | 호스트 premium tier                                       |
+| Gemini   | Pro                  | Pro (Gemini는 Pro가 최상위 — `--heavy`는 no-op + warning) |
 
 > 코드 리뷰는 패턴 매칭 비중이 높아 Sonnet 4.6으로 충분합니다. 회사 환경 등 Pro 미가용 시에는 Flash로 자동 fallback. Flash 모델로도 핵심 보안·크래시 이슈에 대한 객관 판정이 가능합니다.
 

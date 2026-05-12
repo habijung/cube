@@ -43,13 +43,13 @@ created: 2026-04-09
 
 ### 3.2 Files Affected
 
-| Path                                          | Change | Why                                              |
-| :-------------------------------------------- | :----- | :----------------------------------------------- |
-| `agents/claude/claude-status-line.sh`         | NEW    | `scripts/`에서 이동 (배포 경로 미러링)           |
-| `scripts/claude-status-line.sh`               | DELETE | 위 이동에 따른 정리                              |
-| `agents/opencode/plugins/cmux-notify.js`      | NEW    | OpenCode tmux 알림 플러그인 통합                 |
-| `scripts/install.sh`                          | MODIFY | agents/ 하위 자원의 symlink 생성·진단 로직 추가  |
-| `CLAUDE.md`                                   | MODIFY | `agents/` 디렉토리 설명 추가                     |
+| Path                                     | Change | Why                                             |
+| :--------------------------------------- | :----- | :---------------------------------------------- |
+| `agents/claude/claude-status-line.sh`    | NEW    | `scripts/`에서 이동 (배포 경로 미러링)          |
+| `scripts/claude-status-line.sh`          | DELETE | 위 이동에 따른 정리                             |
+| `agents/opencode/plugins/cmux-notify.js` | NEW    | OpenCode tmux 알림 플러그인 통합                |
+| `scripts/install.sh`                     | MODIFY | agents/ 하위 자원의 symlink 생성·진단 로직 추가 |
+| `CLAUDE.md`                              | MODIFY | `agents/` 디렉토리 설명 추가                    |
 
 ### 3.3 Risks & Mitigations
 

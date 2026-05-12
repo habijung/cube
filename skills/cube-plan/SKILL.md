@@ -5,7 +5,7 @@ trigger:
   - /cube-plan
   - 계획 세워줘
   - plan
-argument-hint: "[task-id] \"설명\" [--list] [--close task-id]"
+argument-hint: '[task-id] "설명" [--list] [--close task-id]'
 disable-model-invocation: false
 allowed-tools: Bash, Read, Grep
 compatibility: opencode, claude, gemini
@@ -118,7 +118,6 @@ Task ID를 결정하십시오:
    - `### 3.5 Acceptance Criteria` 내 미달 항목
 2. **미완료/미달 항목이 있으면** 어느 절의 어느 항목이 미완료인지 명시하여 경고를 출력하고 사용자 확인을 요청하십시오. 사용자가 `status: abandoned`로 종료하기를 원하면 진행, 그 외에는 작업을 중단하십시오.
 3. 사용자 승인 후 다음의 문서 정리(Cleanup & Archive)를 결정적으로 수행하십시오:
-
    - **문서 정제 (Refine):** 아래 **File Templates** 절의 **Closeout 템플릿**을 그대로 사용하여 새 문서를 작성합니다. 누락 검증을 위해 `<!-- required: ... -->` 주석은 **제거하지 마십시오**.
      - **YAML frontmatter 전이 (4 → 6 필드):** 원본 plan의 frontmatter 4개 필드(`task-id`, `status`, `branch`, `created`)를 보존하되 `status`를 `active`에서 `done`(모두 완료) 또는 `abandoned`(미완료 종료)로 변경하고, 다음 2개 필드를 추가하십시오:
        - `closed`: 오늘 날짜 (YYYY-MM-DD)
@@ -200,9 +199,9 @@ created: YYYY-MM-DD
 
 ### 3.2 Files Affected
 
-| Path     | Change                | Why          |
-| :------- | :-------------------- | :----------- |
-| <path>   | NEW / MODIFY / DELETE | <간단 사유>  |
+| Path   | Change                | Why         |
+| :----- | :-------------------- | :---------- |
+| <path> | NEW / MODIFY / DELETE | <간단 사유> |
 
 ### 3.3 Risks & Mitigations
 
@@ -267,6 +266,7 @@ final-commit: <hash>
 # Plan Closeout: <task-id> — <한 줄 설명>
 
 ## 1. Outcome
+
 <!-- required: 1-paragraph summary, branch, final-commit -->
 
 <달성한 결과를 1-2 문단으로 서술>
@@ -276,25 +276,29 @@ final-commit: <hash>
 - **Final Commit:** `<hash>`
 
 ## 2. Changes Made
+
 <!-- required: file list with commit refs (or commit-by-commit summary) -->
 
-| File   | Change       | Commit   |
-| :----- | :----------- | :------- |
-| <path> | <변경 요약>  | `<hash>` |
+| File   | Change      | Commit   |
+| :----- | :---------- | :------- |
+| <path> | <변경 요약> | `<hash>` |
 
 ## 3. Decisions
+
 <!-- preserved from plan §6 + any closeout-time additions -->
 
-| #   | Date       | Decision    | Reason | Impact |
-| :-- | :--------- | :---------- | :----- | :----- |
+| #   | Date | Decision | Reason | Impact |
+| :-- | :--- | :------- | :----- | :----- |
 
 ## 4. Known Issues & Follow-ups
+
 <!-- limitations, deferred items, recommended follow-up plans -->
 
 - **Limitation:** <남은 한계 또는 미달 항목>
 - **Follow-up:** <후속 작업 제안 또는 추천 plan id>
 
 ## 5. Verification Results
+
 <!-- required: each Acceptance Criterion marked ✅/❌ with verification method -->
 
 - ✅ <Acceptance criterion (plan §3.5에서 가져옴)> — <검증 방법/결과>
