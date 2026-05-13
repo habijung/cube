@@ -125,6 +125,15 @@ try:
 except Exception: sys.exit(1)
 " 2>/dev/null; then
       echo "   - ✅ settings.json statusLine: Configured"
+    elif python3 -c "
+import sys, json
+try:
+    c = json.load(open('$claude_settings'))
+    sl = c.get('statusLine', {})
+    sys.exit(0 if sl.get('type') == 'command' and sl.get('command', '') else 1)
+except Exception: sys.exit(1)
+" 2>/dev/null; then
+      echo "   - ℹ️  settings.json statusLine: 커스텀 설정 감지 — cube 설정 건너뜀"
     else
       echo "   - ⚠️  settings.json statusLine: Not configured"
     fi
@@ -238,12 +247,51 @@ try:
 except Exception: sys.exit(1)
 " 2>/dev/null; then
       echo "✅ [Claude] statusLine is already configured in settings.json."
+    elif python3 -c "
+import sys, json
+try:
+    c = json.load(open('$CLAUDE_SETTINGS'))
+    sl = c.get('statusLine', {})
+    sys.exit(0 if sl.get('type') == 'command' and sl.get('command', '') else 1)
+except Exception: sys.exit(1)
+" 2>/dev/null; then
+      existing_cmd=$(python3 -c "import json; c=json.load(open('$CLAUDE_SETTINGS')); print(c.get('statusLine',{}).get('command',''))" 2>/dev/null)
+      echo "ℹ️  [Claude] 커스텀 statusLine 감지: $existing_cmd"
+      if [[ ! -t 0 ]]; then
+        echo "ℹ️  Non-interactive mode: 커스텀 설정을 유지합니다."
+      else
+        echo "   cube-status-line 표시 형식:"
+        echo "   path | branch* | model | ctx% | 5H:X%(HH:MM) | 7D:X%(Day or HH:MM)"
+        read -p "   cube-status-line.sh로 교체하시겠습니까? (y/N): " replace_statusline
+        if [[ "$replace_statusline" =~ ^[Yy]$ ]]; then
+          python3 -c "
+import json
+p = '$CLAUDE_SETTINGS'
+try:
+    c = json.load(open(p))
+except:
+    c = {}
+c['statusLine'] = {'type': 'command', 'command': '$STATUSLINE_CMD'}
+json.dump(c, open(p, 'w'), indent=2)
+print('✅ [Claude] statusLine replaced with cube-status-line.sh.')
+"
+        else
+          echo "ℹ️  커스텀 설정을 유지합니다."
+        fi
+      fi
     else
       echo "⚠️  [Claude] statusLine is not configured in settings.json."
-      read -p "   Do you want to add it now? (y/n): " enable_statusline
+      echo "   cube-status-line 표시 형식:"
+      echo "   path | branch* | model | ctx% | 5H:X%(HH:MM) | 7D:X%(Day or HH:MM)"
+      if [[ ! -t 0 ]]; then
+        echo "ℹ️  Non-interactive mode: applying statusLine automatically."
+        enable_statusline="y"
+      else
+        read -p "   cube-status-line.sh를 추가하시겠습니까? (y/n): " enable_statusline
+      fi
       if [[ "$enable_statusline" =~ ^[Yy]$ ]]; then
         python3 -c "
-import sys, json
+import json
 p = '$CLAUDE_SETTINGS'
 try:
     c = json.load(open(p))
