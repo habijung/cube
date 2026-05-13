@@ -103,8 +103,8 @@ check_installation() {
   done
 
   # 3. Claude specific status line check
-  local statusline_src="$CUBE_PATH/agents/claude/claude-status-line.sh"
-  local statusline_dest="$HOME/.claude/claude-status-line.sh"
+  local statusline_src="$CUBE_PATH/agents/claude/cube-status-line.sh"
+  local statusline_dest="$HOME/.claude/cube-status-line.sh"
   if [[ -L "$statusline_dest" ]] && [[ "$(readlink "$statusline_dest")" == "$statusline_src" ]]; then
     echo "✅ [Claude] status-line script symlinked correctly"
   elif [[ -d "$HOME/.claude" ]]; then
@@ -121,7 +121,7 @@ import sys, json
 try:
     c = json.load(open('$claude_settings'))
     sl = c.get('statusLine', {})
-    sys.exit(0 if sl.get('type') == 'command' and 'claude-status-line.sh' in sl.get('command', '') else 1)
+    sys.exit(0 if sl.get('type') == 'command' and 'cube-status-line.sh' in sl.get('command', '') else 1)
 except Exception: sys.exit(1)
 " 2>/dev/null; then
       echo "   - ✅ settings.json statusLine: Configured"
