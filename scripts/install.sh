@@ -207,24 +207,26 @@ fi
 # 2. Claude Code status-line symlink
 if [[ " ${AGENTS[@]} " =~ " claude " ]]; then
   echo "🔧 Setting up Claude Code specific configs..."
-  STATUSLINE_SRC="$CUBE_PATH/agents/claude/claude-status-line.sh"
-  STATUSLINE_DEST="$HOME/.claude/claude-status-line.sh"
+  STATUSLINE_SRC="$CUBE_PATH/agents/claude/cube-status-line.sh"
+  STATUSLINE_DEST="$HOME/.claude/cube-status-line.sh"
 
   if [[ -L "$STATUSLINE_DEST" ]] && [[ "$(readlink "$STATUSLINE_DEST")" == "$STATUSLINE_SRC" ]]; then
-    echo "✅ claude-status-line.sh is already symlinked."
+    echo "✅ cube-status-line.sh is already symlinked."
+    chmod +x "$STATUSLINE_SRC"
   elif [[ -f "$STATUSLINE_DEST" ]] && [[ ! -L "$STATUSLINE_DEST" ]]; then
     echo "⚠️  $STATUSLINE_DEST is a regular file. Please manually replace it with a symlink:"
     echo "    rm $STATUSLINE_DEST"
     echo "    ln -sf $STATUSLINE_SRC $STATUSLINE_DEST"
   else
-    echo "✨ Creating symlink for claude-status-line.sh..."
+    echo "✨ Creating symlink for cube-status-line.sh..."
     ln -sf "$STATUSLINE_SRC" "$STATUSLINE_DEST"
+    chmod +x "$STATUSLINE_SRC"
     echo "✅ Symlinked: $STATUSLINE_DEST → $STATUSLINE_SRC"
   fi
 
   # Claude settings.json statusLine 자동 설정
   CLAUDE_SETTINGS="$HOME/.claude/settings.json"
-  STATUSLINE_CMD="$HOME/.claude/claude-status-line.sh"
+  STATUSLINE_CMD="$HOME/.claude/cube-status-line.sh"
 
   if [[ -f "$CLAUDE_SETTINGS" ]]; then
     if python3 -c "
@@ -232,7 +234,7 @@ import sys, json
 try:
     c = json.load(open('$CLAUDE_SETTINGS'))
     sl = c.get('statusLine', {})
-    sys.exit(0 if sl.get('type') == 'command' and 'claude-status-line.sh' in sl.get('command', '') else 1)
+    sys.exit(0 if sl.get('type') == 'command' and 'cube-status-line.sh' in sl.get('command', '') else 1)
 except Exception: sys.exit(1)
 " 2>/dev/null; then
       echo "✅ [Claude] statusLine is already configured in settings.json."
@@ -253,7 +255,7 @@ print('✅ [Claude] statusLine added to settings.json.')
 "
       else
         echo "ℹ️  Skipped. Add manually:"
-        echo '   "statusLine": { "type": "command", "command": "~/.claude/claude-status-line.sh" }'
+        echo '   "statusLine": { "type": "command", "command": "~/.claude/cube-status-line.sh" }'
       fi
     fi
   else
