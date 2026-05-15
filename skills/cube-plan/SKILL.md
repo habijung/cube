@@ -84,8 +84,9 @@ Task ID를 결정하십시오:
 
 **Strategy 작성 원칙:**
 
-- **Files Affected**: 단일 파일이라도 표로 명시 (Path / Change / Why). 라인 번호는 알려진 경우 포함.
-- **Verification**: "테스트 작성"같은 추상 표현 금지. 실제 실행할 명령어 또는 사람이 검증할 시나리오를 적을 것.
+- **Approach**: **핵심 구현 단위(헬퍼 함수 · 주요 알고리즘 · 파싱 로직 등)마다 코드 스니펫 1개씩** 포함할 것 (bash/python/typescript 등; 보통 3개 이상, 단순 task는 1개로 충분). "1개 이상"이라는 표현에 만족하지 말고 task 복잡도에 비례하여 scale. 약한 모델(Haiku/Flash 등)이 plan만 보고 추가 질문 없이 구현할 수 있도록 self-contained하게 작성. 구현 단위가 4개 이상이거나 헬퍼/유틸이 다수라면 **sub-section(3.1.1, 3.1.2 …)으로 분할 권장**하며, 다른 접근과의 트레이드오프가 의사결정에 영향을 주는 경우 **비교표 포함 권장**.
+- **Files Affected**: 단일 파일이라도 표로 명시 (Path / Change / Reuse / Why). 라인 번호는 알려진 경우 포함. Reuse 컬럼에는 재사용할 기존 함수/패턴을 `path/file.ext:function_name` 형식으로 명시(없으면 `-`).
+- **Verification**: "테스트 작성"같은 추상 표현 금지. 실제 실행할 명령어 또는 사람이 검증할 시나리오를 적을 것. **Self-Contained Check**: 작성 완료 후 "약한 모델(Haiku/Flash 등)이 본 plan만 보고 추가 질문 없이 구현 가능한가?"를 self-review하여 부족한 부분(코드 스니펫 누락, 모호한 파일 경로, 빠진 검증 시나리오 등)을 보강할 것.
 - **Acceptance Criteria**: 객관적으로 ✅/❌ 판정 가능해야 함. 모호한 기준(e.g. "코드 품질 향상")은 거부.
 
 **사용자에게 계획 초안을 제시하고 승인을 받으십시오.** 승인 전까지 파일을 생성하지 마십시오.
@@ -117,21 +118,10 @@ Task ID를 결정하십시오:
    - `## 4. Progress & Phases` 내 미완료 체크박스
    - `### 3.5 Acceptance Criteria` 내 미달 항목
 2. **미완료/미달 항목이 있으면** 어느 절의 어느 항목이 미완료인지 명시하여 경고를 출력하고 사용자 확인을 요청하십시오. 사용자가 `status: abandoned`로 종료하기를 원하면 진행, 그 외에는 작업을 중단하십시오.
-3. 사용자 승인 후 다음의 문서 정리(Cleanup & Archive)를 결정적으로 수행하십시오:
-   - **문서 정제 (Refine):** 아래 **File Templates** 절의 **Closeout 템플릿**을 그대로 사용하여 새 문서를 작성합니다. 누락 검증을 위해 `<!-- required: ... -->` 주석은 **제거하지 마십시오**.
-     - **YAML frontmatter 전이 (4 → 6 필드):** 원본 plan의 frontmatter 4개 필드(`task-id`, `status`, `branch`, `created`)를 보존하되 `status`를 `active`에서 `done`(모두 완료) 또는 `abandoned`(미완료 종료)로 변경하고, 다음 2개 필드를 추가하십시오:
-       - `closed`: 오늘 날짜 (YYYY-MM-DD)
-       - `final-commit`: 현재 HEAD의 단축 hash
-     - **`## 1. Outcome`** — plan §2 Overview 기반 1-2 문단 + Result/Branch/Final Commit 한 줄 요약
-     - **`## 2. Changes Made`** — File / Change / Commit 표. `git log --oneline` 등으로 task-id 관련 커밋을 추출하여 채울 것
-     - **`## 3. Decisions`** — 원본 plan §6 Decisions 표를 그대로 옮기고, close 시점의 추가 결정이 있으면 append
-     - **`## 4. Known Issues & Follow-ups`** — plan §3.3 Risks 중 실현된 항목 + 미달 AC + 후속 작업 제안
-     - **`## 5. Verification Results`** — plan §3.5 Acceptance Criteria 각 항목을 ✅(달성) / ❌(미달) + 검증 방법/결과로 변환
-
-   - **아카이브 보관 (Archive):** `docs/plans/` 디렉토리가 없으면 생성한 후 `docs/plans/<task-id>.md`에 저장합니다. 경로는 **항상 고정**(fallback 없음).
-   - **임시 파일 정리 (Cleanup):**
-     - `.cube/plans/<task-id>.md` 파일 삭제
-     - `.cube/plans/index.md`에서 해당 행 제거 (활성 계획이 0개가 되면 파일 자체 삭제)
+3. 사용자 승인 후 다음 절차를 결정적으로 수행하십시오:
+   - **문서 정제 (Refine):** 아래 **File Templates** 절의 **Closeout 템플릿**대로 새 문서를 작성. `<!-- required: ... -->` 주석은 **제거하지 마십시오**. frontmatter는 4→6 필드 전이 (`status`를 `done` 또는 `abandoned`로 변경, `closed: YYYY-MM-DD`와 `final-commit: <단축 hash>` 추가). 5개 본문 섹션 각각의 데이터 소스는 템플릿 주석 참조.
+   - **아카이브 보관 (Archive):** `docs/plans/<task-id>.md`에 저장 (디렉토리 없으면 생성, 경로는 항상 고정).
+   - **임시 파일 정리 (Cleanup):** `.cube/plans/<task-id>.md` 삭제 + `.cube/plans/index.md`에서 해당 행 제거 (활성 0개면 파일 자체 삭제).
    - Git 커밋: `git add docs/plans/ .cube/ && git commit -m "plan: Close and archive <task-id>"`
 
 ---
@@ -199,9 +189,9 @@ created: YYYY-MM-DD
 
 ### 3.2 Files Affected
 
-| Path   | Change                | Why         |
-| :----- | :-------------------- | :---------- |
-| <path> | NEW / MODIFY / DELETE | <간단 사유> |
+| Path   | Change                | Reuse                       | Why         |
+| :----- | :-------------------- | :-------------------------- | :---------- |
+| <path> | NEW / MODIFY / DELETE | <`path:func` 형식 또는 `-`> | <간단 사유> |
 
 ### 3.3 Risks & Mitigations
 
@@ -307,7 +297,7 @@ final-commit: <hash>
 
 > **Note:** `status: abandoned`(미완료 종료) 케이스도 동일 템플릿을 사용합니다. frontmatter `status` 값만 변경하고, §4·§5에 미달 사유와 잔여 작업을 명시하십시오.
 >
-> **Examples:** 활성 plan 형식은 `examples/active-plan.md`, closeout 형식은 `examples/closeout.md` 참조 (skill 디렉토리 기준 상대경로, 동일 task-id 쌍).
+> **Examples:** 활성 plan 형식은 `examples/cube-plan.md`, closeout 형식은 `examples/cube-plan-dev.md` 참조 (skill 디렉토리 기준 상대경로, 동일 task-id 쌍).
 
 ---
 
@@ -321,4 +311,4 @@ final-commit: <hash>
 
 ---
 
-**Updated At:** 2026. 4. 29.
+**Updated At:** 2026. 5. 15.
