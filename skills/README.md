@@ -85,7 +85,7 @@ compatibility: opencode, claude, gemini
 
 | Skill           | Description                                                  |
 | :-------------- | :----------------------------------------------------------- |
-| `cube-cmux`     | cmux 패널 세션 저장 및 복원 실패 시 재개 명령어 안내             |
+| `cube-cmux`     | cmux 패널 세션 저장 및 복원 실패 시 재개 명령어 안내         |
 | `cube-commit`   | 원자적 커밋(Atomic Commits) 전략 기반의 커밋 보조            |
 | `cube-plan`     | 구현 계획 수립 및 `.cube/plans/` 기반 멀티 에이전트 핸드오프 |
 | `cube-plan-dev` | 저장된 계획을 로드하여 개발을 이어가는 컨텍스트 복구 스킬    |
