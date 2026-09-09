@@ -418,7 +418,7 @@ for agent in "${AGENTS[@]}"; do
     if [[ -L "$dest" ]] && [[ "$(readlink "$dest")" == "$skill_dir" ]]; then
       echo "✅ [$agent] $skill_name is already symlinked."
     else
-      ln -sf "$skill_dir" "$dest"
+      ln -sfn "$skill_dir" "$dest"
       echo "✅ [$agent] Symlinked: $dest → $skill_dir"
     fi
   done
