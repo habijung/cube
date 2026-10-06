@@ -6,7 +6,7 @@ trigger:
   - 계획 세워줘
   - plan
 argument-hint: '[task-id] "설명" [--list] [--close task-id]'
-disable-model-invocation: false
+disable-model-invocation: true
 allowed-tools: Bash, Read, Grep
 compatibility: opencode, claude, gemini
 ---

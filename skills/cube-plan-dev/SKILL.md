@@ -7,7 +7,7 @@ trigger:
   - 이어서 개발
   - start development
 argument-hint: "[task-id]"
-disable-model-invocation: false
+disable-model-invocation: true
 allowed-tools: Bash, Read, Write, Grep, Task
 compatibility: opencode, claude, gemini
 ---
