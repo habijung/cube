@@ -7,7 +7,9 @@ cmux가 자체 세션 파일(session-com.cmuxterm.app.json)에 기록해 둔 패
 
 cmux가 agent 정보를 지운 패널은 resumeBinding과 Claude runtime 기록
 (~/.claude/sessions)으로 보완합니다. recorded는 기록 일치이며 실행 중임을 보장하지
-않습니다. 경로로 추정한 연결은 inferred로 구분하고 자동 복사하지 않습니다.
+않습니다. 경로로 추정한 연결은 inferred(*)로 구분하고 자동 복사하지 않습니다.
+Claude JSONL의 명시적 continued-in 기록을 검증하여 이어진 대화의 재개 ID 하나를
+선택합니다. bg라는 종류나 파일 수정 시각만으로 대상을 바꾸지 않습니다.
 
 저장 파일은 `cmux-sessions-<YYMMDD-HHMM>.md` 형식이며, `status`와 `restore`는
 가장 최근 파일을 자동으로 선택합니다. 복구가 끝난 파일은 삭제해도 무방합니다.
@@ -25,7 +27,10 @@ Usage:
 
 Restore:
     자동 복사는 전체 복구 후보가 1개이고, 관측이 완전한 누락이며,
-    저장 당시 recorded였을 때만 합니다. 번호 지정은 확인 필요 항목도 경고 후 복사합니다.
+    저장 당시 recorded이고 재개 대상 검증도 불완전하지 않을 때만 합니다.
+    번호 지정은 확인 필요 항목도 경고 후 복사합니다.
+    저장 파일의 이전 ID는 현재 대화 이어짐 기록으로 다시 검증합니다.
+    현재 살아 있는 bg는 attach 명령, 종료된 대화는 --resume 명령을 안내합니다.
     재개 명령을 대신 실행하지 않습니다. 검토한 뒤 각각 다른 패널에서 실행하세요.
 
 Env:
@@ -53,6 +58,9 @@ SAVE_PATTERN = re.compile(rf"{re.escape(SAVE_PREFIX)}(\d{{6}}-\d{{4}})(?:-(\d+))
 CLAUDE_PROJECTS = os.path.expanduser("~/.claude/projects")
 # Claude가 실행 중인 세션마다 남기는 내부 기록(<pid>.json)입니다. 공식 계약이 아닙니다.
 CLAUDE_RUNTIME = os.path.expanduser("~/.claude/sessions")
+# 내부 JSONL을 무제한으로 읽지 않도록 제한합니다. 초과 시 추정하지 않고 보류합니다.
+CLAUDE_TRANSCRIPT_LIMIT = 32 * 1024 * 1024
+CLAUDE_CONTINUATION_LIMIT = 16
 OPENCODE_DB = os.path.expanduser("~/.local/share/opencode/opencode.db")
 ANTIGRAVITY_CONVERSATIONS = os.path.expanduser("~/.gemini/antigravity-cli/conversations")
 
@@ -297,6 +305,175 @@ def load_claude_runtime(path=None):
     return result
 
 
+def load_claude_transcript(session_id, cache):
+    """본문을 보관하지 않고 유일한 대화 파일에서 이어짐 근거를 읽습니다."""
+    result = {"state": "unknown", "target": None, "messages": False, "cwd": None,
+              "seen_continuation": False, "partial_tail": False}
+    if not text(session_id):
+        return result
+    if session_id in cache:
+        return cache[session_id]
+    cache[session_id] = result
+    if any(c in session_id for c in ("/", "\\")) or session_id in (".", ".."):
+        return result
+    try:
+        with os.scandir(CLAUDE_PROJECTS) as entries:
+            projects = [e.path for e in entries if e.is_dir()]
+        files = []
+        for project in projects:
+            path = os.path.join(project, session_id + ".jsonl")
+            try:
+                os.stat(path)
+                files.append(path)
+            except FileNotFoundError:
+                continue
+        if not files:
+            result["state"] = "absent"
+            return result
+        if len(files) != 1:
+            return result
+        links, message_times = [], []
+        latest_cwd = None
+        after_link = False
+        size = 0
+        with open(files[0], "rb") as f:
+            while True:
+                line = f.readline(CLAUDE_TRANSCRIPT_LIMIT + 1)
+                if not line:
+                    break
+                size += len(line)
+                if size > CLAUDE_TRANSCRIPT_LIMIT:
+                    return result
+                if not line.strip():
+                    continue
+                try:
+                    record = json.loads(line)
+                except (ValueError, UnicodeError):
+                    # 크기 제한은 먼저 검사했으므로, 개행 없는 줄은 실제 EOF입니다.
+                    if line.endswith(b"\n"):
+                        return result
+                    result["partial_tail"] = True
+                    break
+                if not isinstance(record, dict):
+                    return result
+                if record.get("type") == "continued-in":
+                    result["seen_continuation"] = True
+                    target = text(record.get("continuedInSessionId"))
+                    if record.get("sessionId") != session_id or not target:
+                        return result
+                    stamp = text(record.get("timestamp"))
+                    if not stamp:
+                        return result
+                    stamp = datetime.datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+                    if stamp.tzinfo is None:
+                        return result
+                    links.append((target, stamp))
+                elif record.get("type") in ("user", "assistant"):
+                    if record.get("sessionId") != session_id:
+                        return result
+                    result["messages"] = True
+                    path = normalized_path(record.get("cwd"))
+                    if not path:
+                        return result
+                    latest_cwd = path
+                    if links:
+                        after_link = True
+                    # 시각은 이어짐 이후 원래 대화의 독립적인 재진행을 검출할 때만 씁니다.
+                    stamp = record.get("timestamp")
+                    if stamp is not None:
+                        if not text(stamp):
+                            return result
+                        stamp = datetime.datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+                        if stamp.tzinfo is None:
+                            return result
+                    message_times.append(stamp)
+        # 대화 중 cwd가 바뀔 수 있습니다. 과거 경로 개수만으로 연결을 무효화하지 않습니다.
+        result["cwd"] = latest_cwd
+        if links:
+            # 원본의 재진행이나 후속 링크가 작성 중이면 이미 발견한 관계도 보류합니다.
+            if result["partial_tail"]:
+                return result
+            targets = {target for target, _ in links}
+            if len(targets) != 1 or after_link or any(stamp is None for stamp in message_times):
+                return result
+            earliest = min(stamp for _, stamp in links)
+            if any(stamp > earliest for stamp in message_times):
+                return result
+            result["target"] = links[0][0]
+        result["state"] = "exists"
+    except FileNotFoundError:
+        # 읽기 시작한 파일이 사라진 경우 absent가 아니라 관측 불완전으로 둡니다.
+        pass
+    except (OSError, ValueError, TypeError, KeyError, UnicodeError, OverflowError,
+            RecursionError):
+        # JSON 중첩 제한도 조회 불완전입니다. EOF 작성 중으로 처리하지 않습니다.
+        pass
+    return result
+
+
+def resolve_continuation(panel, runtime, cache):
+    """패널 연결의 확실성을 높이지 않고 명시적 이어짐을 검증해 재개 ID를 고릅니다."""
+    panel = dict(panel, warnings=list(panel.get("warnings", [])))
+    if panel["kind"] != "claude":
+        return panel
+    start = panel["sessionId"]
+    chain = [start]
+    cwd = normalized_path(panel.get("cwd"))
+    records = {r["sessionId"]: r for r in runtime["records"]}
+
+    def uncertain(reason):
+        panel["resolution"] = "unknown"
+        panel["_continuation_blocked"] = True
+        panel["warnings"].append(reason + ": 재개 대상 확인 필요")
+        return panel
+
+    while True:
+        metadata = load_claude_transcript(chain[-1], cache)
+        if metadata["state"] == "unknown":
+            if len(chain) == 1 and not metadata["seen_continuation"]:
+                # 연결 근거는 그대로 둡니다. 못 읽었다고 이어짐이 없다고 단정하지 않습니다.
+                panel["_resume_unverified"] = True
+                panel["warnings"].append("대화 이어짐 확인 불가: 자동 복사 제한")
+                return panel
+            return uncertain("대화 이어짐 기록 조회/형식/모호성 오류")
+        if metadata["partial_tail"]:
+            if len(chain) > 1:
+                return uncertain("이어진 대화의 마지막 기록 작성 중")
+            panel["_resume_unverified"] = True
+            panel["warnings"].append("대화 마지막 기록 작성 중: 이어짐 확인 불완전, 자동 복사 제한")
+        target = metadata["target"]
+        if not target:
+            break
+        if target in chain or len(chain) >= CLAUDE_CONTINUATION_LIMIT:
+            return uncertain("대화 이어짐 순환/깊이 제한")
+        if not cwd or metadata["cwd"] != cwd:
+            return uncertain("원래 대화의 작업 경로 불일치/확인 불가")
+        next_metadata = load_claude_transcript(target, cache)
+        if (next_metadata["state"] != "exists" or not next_metadata["messages"]
+                or next_metadata["cwd"] != cwd):
+            return uncertain("이어진 대화 조회/작업 경로 확인 불가")
+        current = records.get(chain[-1])
+        if current and any("parkedJobId 충돌" in w for w in current["warnings"]):
+            return uncertain("runtime의 parked 연결 충돌")
+        linked = [r for r in runtime["records"] if current and current.get("parkedJobId")
+                  and r["kind"] == "bg" and r["jobId"] == current["parkedJobId"]]
+        if linked and (len(linked) != 1 or linked[0]["sessionId"] != target
+                       or linked[0]["cwd"] != cwd):
+            return uncertain("runtime과 대화 이어짐 기록 충돌")
+        target_record = records.get(target)
+        if target_record and target_record["cwd"] != cwd:
+            return uncertain("이어진 runtime 작업 경로 불일치")
+        chain.append(target)
+    if len(chain) > 1:
+        panel.update(sessionId=chain[-1], originSessionId=start, continuation=chain)
+        panel["warnings"].append("대화 이어짐 기록 확인: " + " → ".join(chain))
+        if panel.get("source") in ("binding", "runtime"):
+            for session_id in chain:
+                if session_id in records:
+                    panel["warnings"].extend(records[session_id]["warnings"])
+    return panel
+
+
 def runtime_blocked(runtime, cwd):
     """해당 경로의 runtime 관측이 불완전해 추정을 보류해야 하는지 확인합니다."""
     return runtime["global_block"] or cwd in runtime["blocked"]
@@ -318,7 +495,9 @@ def resolve_panels(candidates, runtime, probe_cache=None):
         "diagnostics": list(runtime["diagnostics"]),
         "probe_cache": cache,
         "runtime": runtime,
+        "continuation_cache": {},
     }
+    all_records = {r["sessionId"]: r for r in runtime["records"]}
     interactive = {
         r["sessionId"]: r for r in runtime["records"] if r["kind"] == "interactive"
     }
@@ -353,7 +532,7 @@ def resolve_panels(candidates, runtime, probe_cache=None):
                 panel["warnings"].append("agent ID와 cmux checkpoint 불일치")
         elif candidate["checkpointId"]:
             # 대화를 아직 쓰지 않은 새 세션도 있으므로 runtime 일치를 먼저 확인합니다.
-            record = interactive.get(panel["sessionId"]) if panel["kind"] == "claude" else None
+            record = all_records.get(panel["sessionId"]) if panel["kind"] == "claude" else None
             if record and cwd and record["cwd"] == cwd:
                 panel.update(source="binding", resolution="recorded")
                 replace = False
@@ -369,9 +548,12 @@ def resolve_panels(candidates, runtime, probe_cache=None):
                 if state == "unknown":
                     panel["warnings"].append("checkpoint 데이터 조회 불가")
 
-        # recorded ID와 보존된 checkpoint는 다른 패널의 runtime 후보에서 제외합니다.
-        if panel["resolution"] == "recorded" or (panel["sessionId"] and not replace):
-            claimed.add((panel["kind"], panel["sessionId"]))
+        # 직접/보존 기록의 이어짐은 경로 추정보다 먼저 해결하고 두 ID를 예약합니다.
+        if panel["sessionId"] and (panel["resolution"] == "recorded" or not replace):
+            panel = resolve_continuation(panel, runtime, snapshot["continuation_cache"])
+            replace = False
+            for session_id in panel.get("continuation", [panel["sessionId"]]):
+                claimed.add((panel["kind"], session_id))
         pending.append((panel, replace))
 
     # --- 2차: 경로별 일괄 매칭 (Claude 전용) ---
@@ -393,11 +575,18 @@ def resolve_panels(candidates, runtime, probe_cache=None):
         snapshot["diagnostics"].append("경로/종류 불명 미확정 패널: Claude 추정 전체 보류")
 
     for cwd, group in owners.items():
-        available = [
-            r
-            for r in interactive.values()
-            if r["cwd"] == cwd and ("claude", r["sessionId"]) not in claimed
-        ]
+        available = []
+        for record in interactive.values():
+            if record["cwd"] != cwd:
+                continue
+            linked_panel = resolve_continuation(
+                dict(kind="claude", cwd=cwd, sessionId=record["sessionId"],
+                     resolution="inferred", warnings=[]),
+                runtime, snapshot["continuation_cache"],
+            )
+            ids = linked_panel.get("continuation", [record["sessionId"]])
+            if not any(("claude", session_id) in claimed for session_id in ids):
+                available.append(record)
         unique = len(group) == 1 and len(available) == 1
         if not runtime_blocked(runtime, cwd) and unique and group[0][1]:
             panel = group[0][0]
@@ -422,7 +611,7 @@ def resolve_panels(candidates, runtime, probe_cache=None):
             snapshot["unresolved"].append(panel)
             continue
 
-        record = interactive.get(panel["sessionId"]) if panel["kind"] == "claude" else None
+        record = all_records.get(panel["sessionId"]) if panel["kind"] == "claude" else None
         if record:
             # runtime 레코드의 경고(PID 확인 제한 등)는 그 레코드를 근거로 ID를 정한
             # 패널에만 붙입니다. agent 기록으로 정해진 패널에 붙이면 잡음만 늘어납니다.
@@ -441,12 +630,14 @@ def resolve_panels(candidates, runtime, probe_cache=None):
                     and not runtime_blocked(runtime, record["cwd"])
                     and normalized_path(panel["cwd"]) == record["cwd"]
                 ):
+                    # parked는 구형 저장 호환용 메타데이터이지 재개 대상 선택 근거가 아닙니다.
                     panel["parked"] = bg[0]["sessionId"]
                     if uses_runtime:
                         panel["warnings"].extend(bg[0]["warnings"])
                 else:
                     panel["warnings"].append("bg 연결 보류")
 
+        panel = resolve_continuation(panel, runtime, snapshot["continuation_cache"])
         cached_probe(cache, panel)
         panel["warnings"] = list(dict.fromkeys(panel["warnings"]))
         snapshot["panels"].append(panel)
@@ -479,8 +670,8 @@ def read_panels(path=SESSION_FILE):
 # --- 재개 명령과 저장 파일 ---------------------------------------------------
 
 
-def resume_command(panel):
-    """패널을 재개하는 셸 명령어를 만듭니다."""
+def resume_command(panel, runtime=None):
+    """재개 대상 하나의 명령을 만듭니다. 확인된 live bg는 attach로 연결합니다."""
     session_id = panel["sessionId"]
 
     if not panel["cwd"]:
@@ -490,6 +681,12 @@ def resume_command(panel):
     cwd = shlex.quote(panel["cwd"])
     quoted_session_id = shlex.quote(str(session_id))
     if panel["kind"] == "claude":
+        if runtime and not runtime_blocked(runtime, normalized_path(panel["cwd"])):
+            records = [r for r in runtime["records"] if r["sessionId"] == session_id]
+            if (len(records) == 1 and records[0]["kind"] == "bg"
+                    and records[0].get("jobId")
+                    and records[0]["cwd"] == normalized_path(panel["cwd"])):
+                return f"cd {cwd} && claude attach {shlex.quote(records[0]['jobId'])}"
         return f"cd {cwd} && claude --resume {quoted_session_id}"
     if panel["kind"] == "opencode":
         return f"cd {cwd} && opencode --session {quoted_session_id}"
@@ -581,17 +778,10 @@ def write_save_file(panels, probe_cache=None, diagnostics=None):
             "```",
             "",
         ]
-        # bg 세션은 패널 복구 대상이 아니므로 참고용으로만 덧붙입니다.
-        if panel.get("parked"):
-            bg = dict(panel, sessionId=panel["parked"])
-            lines += [
-                "bg 참고용 재개 명령 (패널 복구 명령과 별개):",
-                "",
-                "```sh",
-                resume_command(bg),
-                "```",
-                "",
-            ]
+        # 이전/parked ID는 연결 근거일 뿐 별도 복구 명령으로 나열하지 않습니다.
+        if panel.get("originSessionId"):
+            lines.append(f"- 이전 연결 ID: {panel['originSessionId']}")
+            lines.append("")
 
     # restore가 읽는 기계용 블록입니다. 번호는 이 목록의 순서를 그대로 따릅니다.
     lines += [
@@ -602,7 +792,11 @@ def write_save_file(panels, probe_cache=None, diagnostics=None):
         "`/cube-cmux restore`가 읽는 블록입니다. 직접 편집하지 마세요.",
         "",
         "```json",
-        json.dumps({"savedAt": stamp, "panels": panels}, ensure_ascii=False, indent=2),
+        json.dumps({"savedAt": stamp, "panels": [
+            {key: value for key, value in panel.items()
+             if not key.startswith("_") and key != "parked"}
+            for panel in panels
+        ]}, ensure_ascii=False, indent=2),
         "```",
         "",
         f"**Updated At:** {now.strftime('%Y. %-m. %-d.')}",
@@ -665,6 +859,19 @@ def read_save_file(path):
             if key in panel and not text(panel[key]):
                 panel.pop(key)
                 panel["warnings"].append(f"저장된 {key} 형식 오류")
+        if "originSessionId" in panel or "continuation" in panel:
+            chain = panel.get("continuation")
+            valid = (isinstance(chain, list) and 2 <= len(chain) <= CLAUDE_CONTINUATION_LIMIT
+                     and all(text(value) for value in chain))
+            if valid:
+                valid = (len(set(chain)) == len(chain)
+                         and chain[0] == panel.get("originSessionId")
+                         and chain[-1] == panel["sessionId"])
+            if not valid:
+                panel.pop("originSessionId", None)
+                panel.pop("continuation", None)
+                panel["resolution"] = "unknown"
+                panel["warnings"].append("저장된 대화 이어짐 형식 오류: 확인 필요")
         if not isinstance(panel.get("panelTitle"), str):
             panel["panelTitle"] = ""
     return saved
@@ -722,14 +929,22 @@ def compare_saved_vs_current(saved, snapshot):
         value = "matched" if resolution(current) == "recorded" else "uncertain"
         if states.get(key) != "matched":
             states[key] = value
+    # 저장된 관계를 맹신하지 않고 명령 시점의 JSONL 근거로만 재개 ID를 해결합니다.
+    cache = snapshot.get("continuation_cache", {})
+    panels = [resolve_continuation(panel, snapshot["runtime"], cache) for panel in saved["panels"]]
     # 번호는 저장 시점의 순서를 유지합니다. 복구가 진행돼도 번호가 밀리지 않습니다.
     result = {"matched": [], "uncertain": [], "missing": [], "added": []}
-    for index, panel in enumerate(saved["panels"], start=1):
+    for index, panel in enumerate(panels, start=1):
         state = states.get(panel_key(panel))
+        if panel.get("_continuation_blocked"):
+            state = "uncertain"
         if state is None:
-            state = "uncertain" if observation_incomplete(panel, snapshot) else "missing"
+            live = panel["kind"] == "claude" and any(
+                r["sessionId"] == panel["sessionId"] for r in snapshot["runtime"]["records"]
+            )
+            state = "uncertain" if live or observation_incomplete(panel, snapshot) else "missing"
         result[state].append((index, panel))
-    saved_keys = {panel_key(p) for p in saved["panels"]}
+    saved_keys = {panel_key(p) for p in panels}
     result["added"] = [p for p in snapshot["panels"] if panel_key(p) not in saved_keys]
     return result
 
@@ -750,36 +965,33 @@ def require_current_panels():
 
 
 def panel_mark(panel, cache):
-    """한 글자 요약 표시입니다. 우선순위는 ! → ? → ~ 입니다."""
+    """한 글자 요약 표시입니다. 우선순위는 ! → ? → * 입니다."""
     # 세션 데이터가 없음을 확인했습니다 (조회 실패는 '!'가 아니라 진단으로 표시)
     if cached_probe(cache, panel) == "absent":
         return "!"
     # 세션 연결을 확정하지 못했습니다
     if resolution(panel) == "unknown":
         return "?"
-    # 경로 추정, binding만으로 수집됨, 또는 cmux checkpoint와 불일치
-    if (
-        resolution(panel) == "inferred"
-        or panel.get("source") == "binding"
-        or any("불일치" in warning for warning in panel.get("warnings", []))
-    ):
-        return "~"
+    # binding과 불일치 경고는 상세 설명에 남기고 추정 연결만 '*'로 표시합니다.
+    if resolution(panel) == "inferred":
+        return "*"
     return " "
 
 
-def print_panel_rows(panels, probe_cache=None):
-    """패널 목록을 한 줄씩 출력합니다. save와 list가 같은 형식을 씁니다."""
+def print_panel_rows(panels, probe_cache=None, index_width=None):
+    """최대 번호의 자릿수로 정렬합니다. save와 list가 같은 형식을 씁니다."""
     cache = {} if probe_cache is None else probe_cache
+    if index_width is None:
+        index_width = len(str(len(panels)))
     for index, panel in enumerate(panels, start=1):
-        print_panel_row(index, panel, cache)
+        print_panel_row(index, panel, cache, index_width)
 
 
-def print_panel_row(index, panel, cache):
+def print_panel_row(index, panel, cache, index_width=1):
     mark = panel_mark(panel, cache)
-    bg = f"  (bg: {panel['parked'][:8]})" if panel.get("parked") else ""
     print(
-        f"  [{index}]{mark} {panel['workspace']:16} {panel['kind']:9} "
-        f"{panel['sessionId'][:8]}{bg}"
+        f"  [{index:>{index_width}}]{mark} {panel['workspace']:16} {panel['kind']:9} "
+        f"{panel['sessionId'][:8]}"
     )
 
 
@@ -801,9 +1013,9 @@ def print_diagnostics(snapshot):
     descriptions = {
         "!": "세션 데이터가 없음을 확인했습니다.",
         "?": "세션 연결을 확정하지 못했습니다. 확인이 필요합니다.",
-        "~": "cmux 기록이 불완전하거나 추정된 연결입니다. 재시작 전 save를 권장합니다.",
+        "*": "추정 연결 — 상세 설명을 확인하세요. 재시작 전 save를 권장합니다.",
     }
-    for mark in ("!", "?", "~"):
+    for mark in ("!", "?", "*"):
         if mark in marks:
             print(f"\n  {mark} {descriptions[mark]}")
 
@@ -880,6 +1092,8 @@ def load_comparison():
 def cmd_status():
     path, saved, snapshot, result = load_comparison()
     total = len(saved["panels"])
+    index_width = len(str(max(total, len(result["added"]))))
+    indent = " " * (6 + index_width)
 
     print(f"저장 파일: {os.path.basename(path)} ({saved['savedAt']})")
     print(
@@ -891,7 +1105,9 @@ def cmd_status():
         if result[key]:
             print(label + ":")
             for index, panel in result[key]:
-                print_panel_row(index, panel, snapshot["probe_cache"])
+                print_panel_row(index, panel, snapshot["probe_cache"], index_width)
+                for warning in panel.get("warnings", []):
+                    print(f"{indent}근거/경고: {warning}")
     if result["uncertain"] or result["missing"]:
         print("\n복구 명령을 확인하려면: /cube-cmux restore")
     else:
@@ -899,7 +1115,7 @@ def cmd_status():
 
     if result["added"]:
         print(f"\n저장 이후 새로 생긴 세션 {len(result['added'])}개 (저장 파일이 낡았습니다):")
-        print_panel_rows(result["added"], snapshot["probe_cache"])
+        print_panel_rows(result["added"], snapshot["probe_cache"], index_width)
         print("\n갱신하려면: /cube-cmux save")
 
     print_diagnostics(snapshot)
@@ -909,16 +1125,22 @@ def print_restore_warning(panel, uncertain, cache):
     """복구 명령에 붙일 경고를 출력합니다."""
     if uncertain or resolution(panel) != "recorded":
         print("⚠️  이미 실행 중일 수 있고, ID가 추정이거나 오래된 기록일 수 있습니다.")
+    if panel.get("_resume_unverified"):
+        print("⚠️  대화 이어짐 확인이 불완전합니다. 자동 복사하지 않습니다.")
     state = cached_probe(cache, panel)
     if state == "absent":
         print("⚠️  세션 데이터가 없습니다. 재개해도 빈 세션이 열릴 수 있습니다.")
     elif state == "unknown":
         print("⚠️  세션 데이터 존재 여부를 확인하지 못했습니다.")
+    for warning in panel.get("warnings", []):
+        print(f"  근거/경고: {warning}")
 
 
 def cmd_restore(arg=None):
-    _, _, snapshot, result = load_comparison()
+    _, saved, snapshot, result = load_comparison()
     cache = snapshot["probe_cache"]
+    index_width = len(str(len(saved["panels"])))
+    indent = " " * (6 + index_width)
     candidates = result["missing"] + result["uncertain"]
 
     if not candidates:
@@ -942,8 +1164,8 @@ def cmd_restore(arg=None):
             print(f"[{index}]는 복구 후보가 아닙니다. 사용 가능한 번호: {valid}")
             sys.exit(1)
 
-        command = resume_command(panel)
-        print(f"[{index}] {panel['workspace']} — {panel['kind']}")
+        command = resume_command(panel, snapshot["runtime"])
+        print(f"[{index:>{index_width}}] {panel['workspace']} — {panel['kind']}")
         print(f"  {command}\n")
         print_restore_warning(panel, index in uncertain_ids, cache)
         if copy_to_clipboard(command):
@@ -957,16 +1179,17 @@ def cmd_restore(arg=None):
         if result[key]:
             print(f"{label} {len(result[key])}개\n")
             for index, panel in result[key]:
-                print_panel_row(index, panel, cache)
-                print(f"       {resume_command(panel)}")
+                print_panel_row(index, panel, cache, index_width)
+                print(f"{indent}{resume_command(panel, snapshot['runtime'])}")
                 print_restore_warning(panel, key == "uncertain", cache)
     print_diagnostics(snapshot)
 
-    # 자동 복사는 후보가 하나뿐이고, 관측이 완전한 누락이며, 저장 당시 recorded일 때만 합니다
+    # 자동 복사는 단일 누락 후보, 저장 당시 recorded, 재개 대상 검증 불완전 없음이 필요합니다
     if len(candidates) == 1:
         index, panel = candidates[0]
-        if index not in uncertain_ids and resolution(panel) == "recorded":
-            if copy_to_clipboard(resume_command(panel)):
+        if (index not in uncertain_ids and resolution(panel) == "recorded"
+                and not panel.get("_resume_unverified")):
+            if copy_to_clipboard(resume_command(panel, snapshot["runtime"])):
                 print("\n✓ 클립보드에 복사했습니다 — 새 패널에서 ⌘V + Enter")
                 return
 
