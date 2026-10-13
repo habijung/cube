@@ -10,6 +10,9 @@ cmux가 agent 정보를 지운 패널은 resumeBinding과 Claude runtime 기록
 않습니다. 경로로 추정한 연결은 inferred(*)로 구분하고 자동 복사하지 않습니다.
 Claude JSONL의 명시적 continued-in 기록을 검증하여 이어진 대화의 재개 ID 하나를
 선택합니다. bg라는 종류나 파일 수정 시각만으로 대상을 바꾸지 않습니다.
+pi는 파일 경로 또는 전체 ID를 검증하여 파일 경로 하나를 복구 대상으로 사용합니다.
+ID는 작업 경로의 기본 저장소와 검증한 기록의 디렉토리에서만 찾으며 본문은 읽지 않습니다.
+헤더 검증 실패나 중복 패널 연결은 자동 복사하지 않습니다.
 
 저장 파일은 `cmux-sessions-<YYMMDD-HHMM>.md` 형식이며, `status`와 `restore`는
 가장 최근 파일을 자동으로 선택합니다. 복구가 끝난 파일은 삭제해도 무방합니다.
@@ -44,6 +47,7 @@ import os
 import re
 import shlex
 import sqlite3
+import stat
 import subprocess
 import sys
 
@@ -61,6 +65,10 @@ CLAUDE_RUNTIME = os.path.expanduser("~/.claude/sessions")
 # 내부 JSONL을 무제한으로 읽지 않도록 제한합니다. 초과 시 추정하지 않고 보류합니다.
 CLAUDE_TRANSCRIPT_LIMIT = 32 * 1024 * 1024
 CLAUDE_CONTINUATION_LIMIT = 16
+# pi는 첫 줄 헤더만 읽습니다. ID 조회도 작업 경로별로 제한하고 본문은 읽지 않습니다.
+PI_HEADER_LIMIT = 64 * 1024
+PI_SESSIONS = os.path.expanduser("~/.pi/agent/sessions")
+PI_LOOKUP_FILE_LIMIT = 256
 OPENCODE_DB = os.path.expanduser("~/.local/share/opencode/opencode.db")
 ANTIGRAVITY_CONVERSATIONS = os.path.expanduser("~/.gemini/antigravity-cli/conversations")
 
@@ -85,12 +93,171 @@ def normalized_path(path):
         return None
 
 
+def is_pi_session_path(session_path):
+    """직접 조회할 pi 세션 파일의 절대 경로인지 확인합니다."""
+    return bool(text(session_path) and os.path.isabs(session_path)
+                and session_path.endswith(".jsonl"))
+
+
+def load_pi_session_header(session_path, cache):
+    """pi의 첫 줄만 읽어 검증합니다. 헤더가 정상이어도 본문 무결성은 보장하지 않습니다."""
+    result = dict(state="unknown", id=None, cwd=None)
+    if not is_pi_session_path(session_path):
+        return result
+    key = ("pi-header", normalized_path(session_path) or session_path)
+    if key in cache:
+        return cache[key]
+    try:
+        # 디렉토리·FIFO 등은 열지 않습니다. 세션 파일이나 설정을 수정하지 않습니다.
+        if stat.S_ISREG(os.stat(session_path).st_mode):
+            with open(session_path, "rb") as session:
+                line = session.readline(PI_HEADER_LIMIT + 1)
+            if len(line) <= PI_HEADER_LIMIT:
+                header = json.loads(line.decode("utf-8"))
+                if isinstance(header, dict) and header.get("type") == "session":
+                    version = header.get("version", 1)
+                    session_id = text(header.get("id"))
+                    cwd = text(header.get("cwd"))
+                    valid_id = session_id and not any(
+                        ord(c) < 32 or 127 <= ord(c) <= 159 for c in session_id
+                    )
+                    if (type(version) is int and version in (1, 2, 3) and valid_id
+                            and cwd and os.path.isabs(cwd) and normalized_path(cwd)):
+                        result.update(state="exists", id=session_id, cwd=cwd)
+    except FileNotFoundError:
+        result["state"] = "absent"
+    except (OSError, ValueError, UnicodeError, RecursionError):
+        pass
+    cache[key] = result
+    return result
+
+
+def pi_header_state(metadata, cwd):
+    """파일 존재 여부와 패널 작업 경로 검증을 분리하여 판정합니다."""
+    state = metadata["state"]
+    if (state == "exists" and cwd is not None
+            and (not text(cwd) or not os.path.isabs(cwd)
+                 or normalized_path(cwd) != normalized_path(metadata["cwd"]))):
+        return "unknown"
+    return state
+
+
+def register_pi_session_paths(panels, cache):
+    """검증한 기록의 디렉토리만 같은 cwd의 ID 조회 범위에 추가합니다."""
+    for panel in panels:
+        if panel["kind"] != "pi" or not is_pi_session_path(panel.get("sessionId")):
+            continue
+        cwd = panel.get("cwd")
+        if not text(cwd) or not os.path.isabs(cwd):
+            continue
+        metadata = load_pi_session_header(panel["sessionId"], cache)
+        if pi_header_state(metadata, cwd) != "exists":
+            continue
+        normalized_cwd = normalized_path(cwd)
+        key = ("pi-directories", normalized_cwd)
+        directories = cache.setdefault(key, set())
+        directory = normalized_path(os.path.dirname(panel["sessionId"]))
+        if directory and directory not in directories:
+            directories.add(directory)
+            # 비교에서 저장 경로가 추가되면 기존 ID 조회의 유일성도 다시 확인합니다.
+            for old_key in list(cache):
+                if old_key[0] in ("pi-files", "pi-lookup") and old_key[-1] == normalized_cwd:
+                    cache.pop(old_key)
+
+
+def resolve_pi_session_file(session_id, cwd, cache):
+    """전체 ID가 정확히 일치하는 파일 하나만 채택합니다. 최신/부분 ID는 쓰지 않습니다."""
+    if is_pi_session_path(session_id):
+        metadata = dict(load_pi_session_header(session_id, cache))
+        metadata["path"] = session_id
+        return metadata
+    unknown = dict(state="unknown", id=None, cwd=None, path=None,
+                   reason="pi ID 조회 범위 확인 불가")
+    if (not text(session_id) or session_id in (".", "..") or session_id.endswith(".jsonl")
+            or any(c in session_id for c in "/\\")
+            or any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in session_id)
+            or not text(cwd) or not os.path.isabs(cwd)):
+        return unknown
+    normalized_cwd = normalized_path(cwd)
+    if not normalized_cwd:
+        return unknown
+    # pi의 저장소 슬러그는 realpath가 아닌 절대 cwd를 사용하므로 별칭별 조회를 구분합니다.
+    absolute_cwd = os.path.abspath(cwd)
+    key = ("pi-lookup", session_id, absolute_cwd, normalized_cwd)
+    if key in cache:
+        return cache[key]
+    files_key = ("pi-files", absolute_cwd, normalized_cwd)
+    if files_key not in cache:
+        # pi SessionManager의 기본 cwd 슬러그 규칙입니다. 파일 이름으로 ID는 추정하지 않습니다.
+        slug = "--" + re.sub(r"[/\\:]", "-", absolute_cwd.lstrip("/\\")) + "--"
+        default_directory = normalized_path(os.path.join(PI_SESSIONS, slug))
+        if not default_directory:
+            return unknown
+        directories = set(cache.get(("pi-directories", normalized_cwd), set()))
+        directories.add(default_directory)
+        paths, incomplete = set(), False
+        try:
+            for directory in sorted(directories):
+                try:
+                    entries = os.scandir(directory)
+                except FileNotFoundError:
+                    # 처음부터 없는 디렉토리는 건너뛰되, 열린 뒤의 순회 실패는 보류합니다.
+                    continue
+                with entries:
+                    for entry in entries:
+                        if entry.name.endswith(".jsonl"):
+                            path = normalized_path(entry.path)
+                            if not path:
+                                raise ValueError("pi path validation")
+                            paths.add(path)
+                            if len(paths) > PI_LOOKUP_FILE_LIMIT:
+                                raise ValueError("pi file limit")
+        except (OSError, ValueError):
+            incomplete = True
+        # 목록 조회가 실패하면 부분 결과의 헤더를 읽고 유일하다고 확정하지 않습니다.
+        metadata = [] if incomplete else [
+            (path, load_pi_session_header(path, cache)) for path in sorted(paths)
+        ]
+        incomplete = incomplete or any(m["state"] != "exists" for _, m in metadata)
+        cache[files_key] = metadata, incomplete
+    metadata, incomplete = cache[files_key]
+    matches = [(path, m) for path, m in metadata if m["id"] == session_id]
+    if (not incomplete and len(matches) == 1
+            and pi_header_state(matches[0][1], cwd) == "exists"):
+        path, header = matches[0]
+        result = dict(header, path=path)
+    else:
+        result = dict(unknown, reason="pi ID 조회 불완전: 파일 없음·중복·헤더 오류 또는 범위 제한")
+    cache[key] = result
+    return result
+
+
+def mark_pi_duplicate_panels(panels):
+    """동일 재개 대상을 가리키는 서로 다른 pi 패널은 제거하지 않고 연결을 보류합니다."""
+    groups = {}
+    for panel in panels:
+        if panel["kind"] == "pi":
+            groups.setdefault(panel_key(panel), []).append(panel)
+    for group in groups.values():
+        owners = {p.get("surfaceId") or id(p) for p in group}
+        if len(owners) > 1:
+            for panel in group:
+                panel.update(resolution="unknown", _pi_binding_ambiguous=True,
+                             _resume_unverified=True)
+                warning = "pi 패널 연결 중복: 같은 재개 대상의 실제 연결 확인 필요"
+                if warning not in panel.setdefault("warnings", []):
+                    panel["warnings"].append(warning)
+
+
 def probe_session_data(kind, session_id, cwd):
     """세션 데이터(대화 기록)가 디스크에 남아 있는지 확인합니다.
 
     exists: 데이터 있음 / absent: 정상 조회 결과 없음 / unknown: 조회 실패 또는 미지원
     조회 오류를 absent로 숨기지 않습니다. absent는 checkpoint 교체 근거가 되기 때문입니다.
     """
+    # pi의 경로/ID 검증은 아래 일반 에이전트 파일 이름 검사보다 먼저 처리합니다.
+    if kind == "pi":
+        return pi_header_state(resolve_pi_session_file(session_id, cwd, {}), cwd)
     # 저장 위치를 모르는 에이전트는 판정을 보류합니다.
     # 데이터가 있는데 '!'를 붙이면 잘못된 경고가 되기 때문입니다.
     if kind not in ("claude", "opencode", "antigravity"):
@@ -149,6 +316,26 @@ def probe_session_data(kind, session_id, cwd):
 def cached_probe(cache, panel):
     """한 명령 안에서 같은 세션의 데이터 조회를 한 번만 수행합니다."""
     key = (panel["kind"], panel["sessionId"], normalized_path(panel.get("cwd")))
+    if panel["kind"] == "pi":
+        metadata = resolve_pi_session_file(panel["sessionId"], panel.get("cwd"), cache)
+        state = pi_header_state(metadata, panel.get("cwd"))
+        cache[key] = state
+        # cmux 원본 ID는 유지합니다. 비교/복구에는 검증한 경로만 별도로 사용합니다.
+        panel.pop("_pi_lookup_warning", None)
+        if state == "exists":
+            panel["_pi_display_id"] = metadata["id"]
+            panel["_pi_resolved_path"] = metadata["path"]
+        else:
+            panel.pop("_pi_display_id", None)
+            panel.pop("_pi_resolved_path", None)
+            if metadata.get("reason"):
+                panel["_pi_lookup_warning"] = metadata["reason"]
+        if (state == "exists" and text(panel.get("cwd"))
+                and not panel.get("_pi_binding_ambiguous")):
+            panel.pop("_resume_unverified", None)
+        else:
+            panel["_resume_unverified"] = True
+        return state
     if key not in cache:
         cache[key] = probe_session_data(*key)
     return cache[key]
@@ -605,6 +792,7 @@ def resolve_panels(candidates, runtime, probe_cache=None):
                     panel["warnings"].append("runtime 후보: " + candidates_text)
 
     # --- 마무리: ID 없는 패널 분리, runtime 경고와 bg 연결 ---
+    register_pi_session_paths([panel for panel, _ in pending], cache)
     for panel, _ in pending:
         if not panel["sessionId"]:
             panel["warnings"].append("세션 ID 확인 불가: 저장에서 제외")
@@ -641,6 +829,7 @@ def resolve_panels(candidates, runtime, probe_cache=None):
         cached_probe(cache, panel)
         panel["warnings"] = list(dict.fromkeys(panel["warnings"]))
         snapshot["panels"].append(panel)
+    mark_pi_duplicate_panels(snapshot["panels"])
     return snapshot
 
 
@@ -672,7 +861,8 @@ def read_panels(path=SESSION_FILE):
 
 def resume_command(panel, runtime=None):
     """재개 대상 하나의 명령을 만듭니다. 확인된 live bg는 attach로 연결합니다."""
-    session_id = panel["sessionId"]
+    session_id = (panel.get("_pi_resolved_path") if panel["kind"] == "pi" else None)
+    session_id = session_id or panel["sessionId"]
 
     if not panel["cwd"]:
         return f"# 작업 경로를 알 수 없습니다 — {panel['kind']} 세션 {session_id}"
@@ -690,6 +880,8 @@ def resume_command(panel, runtime=None):
         return f"cd {cwd} && claude --resume {quoted_session_id}"
     if panel["kind"] == "opencode":
         return f"cd {cwd} && opencode --session {quoted_session_id}"
+    if panel["kind"] == "pi" and is_pi_session_path(session_id):
+        return f"cd {cwd} && pi --session {quoted_session_id}"
 
     # 그 밖의 에이전트는 cmux가 기록한 실행 인자를 그대로 재사용합니다.
     # antigravity처럼 인자에 세션 식별자가 포함된 경우 이대로 재개됩니다.
@@ -730,6 +922,11 @@ def resolution(panel):
 def write_save_file(panels, probe_cache=None, diagnostics=None):
     """사람이 읽는 목록과 restore가 파싱할 JSON을 한 파일에 담습니다."""
     cache = {} if probe_cache is None else probe_cache
+    register_pi_session_paths(panels, cache)
+    for panel in panels:
+        if panel["kind"] == "pi":
+            cached_probe(cache, panel)
+    mark_pi_duplicate_panels(panels)
     now = datetime.datetime.now()
     stamp = now.strftime("%Y-%m-%d %H:%M:%S")
 
@@ -793,8 +990,9 @@ def write_save_file(panels, probe_cache=None, diagnostics=None):
         "",
         "```json",
         json.dumps({"savedAt": stamp, "panels": [
-            {key: value for key, value in panel.items()
-             if not key.startswith("_") and key != "parked"}
+            {key: (panel.get("_pi_resolved_path", value)
+                   if key == "sessionId" and panel["kind"] == "pi" else value)
+             for key, value in panel.items() if not key.startswith("_") and key != "parked"}
             for panel in panels
         ]}, ensure_ascii=False, indent=2),
         "```",
@@ -890,7 +1088,12 @@ def copy_to_clipboard(value):
 
 def panel_key(panel):
     """세션 동일성 키입니다. 종류가 다른 에이전트의 ID 충돌을 막습니다."""
-    return panel["kind"], panel["sessionId"]
+    session_id = panel["sessionId"]
+    if panel["kind"] == "pi":
+        session_id = panel.get("_pi_resolved_path", session_id)
+        if is_pi_session_path(session_id):
+            session_id = normalized_path(session_id)
+    return panel["kind"], session_id
 
 
 def observation_incomplete(panel, snapshot):
@@ -922,11 +1125,20 @@ def observation_incomplete(panel, snapshot):
 
 def compare_saved_vs_current(saved, snapshot):
     """저장 목록을 현재 snapshot과 대조해 기록 일치·확인 필요·누락·신규로 나눕니다."""
+    # 저장 파일의 직접 경로도 조회 범위에 추가한 뒤 현재 ID의 유일성을 다시 검증합니다.
+    register_pi_session_paths(snapshot["panels"] + saved["panels"], snapshot["probe_cache"])
+    for panel in snapshot["panels"]:
+        if panel["kind"] == "pi":
+            cached_probe(snapshot["probe_cache"], panel)
+    mark_pi_duplicate_panels(snapshot["panels"])
     # 같은 키가 여러 패널에 있으면 recorded를 우선합니다.
     states = {}
     for current in snapshot["panels"]:
         key = panel_key(current)
         value = "matched" if resolution(current) == "recorded" else "uncertain"
+        if (current["kind"] == "pi" and not is_pi_session_path(current["sessionId"])
+                and not current.get("_pi_resolved_path")):
+            value = "uncertain"
         if states.get(key) != "matched":
             states[key] = value
     # 저장된 관계를 맹신하지 않고 명령 시점의 JSONL 근거로만 재개 ID를 해결합니다.
@@ -935,6 +1147,8 @@ def compare_saved_vs_current(saved, snapshot):
     # 번호는 저장 시점의 순서를 유지합니다. 복구가 진행돼도 번호가 밀리지 않습니다.
     result = {"matched": [], "uncertain": [], "missing": [], "added": []}
     for index, panel in enumerate(panels, start=1):
+        if panel["kind"] == "pi":
+            cached_probe(snapshot["probe_cache"], panel)
         state = states.get(panel_key(panel))
         if panel.get("_continuation_blocked"):
             state = "uncertain"
@@ -987,11 +1201,18 @@ def print_panel_rows(panels, probe_cache=None, index_width=None):
         print_panel_row(index, panel, cache, index_width)
 
 
+def display_session_id(panel):
+    """pi는 검증한 헤더 ID를 표시합니다. 경로나 파일명에서 ID를 추정하지 않습니다."""
+    if panel["kind"] == "pi":
+        return panel.get("_pi_display_id", "확인 불가")[:8]
+    return panel["sessionId"][:8]
+
+
 def print_panel_row(index, panel, cache, index_width=1):
     mark = panel_mark(panel, cache)
     print(
         f"  [{index:>{index_width}}]{mark} {panel['workspace']:16} {panel['kind']:9} "
-        f"{panel['sessionId'][:8]}"
+        f"{display_session_id(panel)}"
     )
 
 
@@ -1023,8 +1244,10 @@ def print_diagnostics(snapshot):
         warnings = list(panel["warnings"])
         if cached_probe(cache, panel) == "unknown":
             warnings.append("세션 데이터 조회 불가")
+        if panel.get("_pi_lookup_warning"):
+            warnings.append(panel["_pi_lookup_warning"])
         if warnings:
-            print(f"  {panel['workspace']} ({panel['sessionId'][:8]}): " + "; ".join(warnings))
+            print(f"  {panel['workspace']} ({display_session_id(panel)}): " + "; ".join(warnings))
 
     for message in snapshot_messages(snapshot):
         print(f"  진단: {message}")
@@ -1123,11 +1346,19 @@ def cmd_status():
 
 def print_restore_warning(panel, uncertain, cache):
     """복구 명령에 붙일 경고를 출력합니다."""
+    state = cached_probe(cache, panel)
     if uncertain or resolution(panel) != "recorded":
         print("⚠️  이미 실행 중일 수 있고, ID가 추정이거나 오래된 기록일 수 있습니다.")
     if panel.get("_resume_unverified"):
-        print("⚠️  대화 이어짐 확인이 불완전합니다. 자동 복사하지 않습니다.")
-    state = cached_probe(cache, panel)
+        if panel["kind"] == "pi":
+            if panel.get("_pi_binding_ambiguous"):
+                print("⚠️  pi 패널 연결이 중복되어 자동 복사하지 않습니다.")
+            elif state == "exists":
+                print("⚠️  pi 작업 경로 확인이 불완전합니다. 자동 복사하지 않습니다.")
+            else:
+                print("⚠️  pi 세션 파일 검증이 불완전합니다. 자동 복사하지 않습니다.")
+        else:
+            print("⚠️  대화 이어짐 확인이 불완전합니다. 자동 복사하지 않습니다.")
     if state == "absent":
         print("⚠️  세션 데이터가 없습니다. 재개해도 빈 세션이 열릴 수 있습니다.")
     elif state == "unknown":

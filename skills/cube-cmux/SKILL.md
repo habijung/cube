@@ -9,7 +9,7 @@ trigger:
 argument-hint: "[list | save | status | restore [번호]]"
 disable-model-invocation: false # Claude, User 모두 사용 가능
 allowed-tools: Bash
-compatibility: opencode, claude, gemini
+compatibility: opencode, claude, gemini, pi
 ---
 
 # cmux Session Keeper
@@ -22,12 +22,13 @@ cmux는 종료 시 각 패널의 에이전트 세션 정보를 자체 파일에 
 
 ## 지원 에이전트
 
-| 에이전트      | 재개 명령어                                                 | 세션 데이터 확인 위치                            |
-| :------------ | :---------------------------------------------------------- | :----------------------------------------------- |
-| `claude`      | `claude --resume <id>` / live bg는 `claude attach <job-id>` | `~/.claude/projects/<슬러그>/<id>.jsonl`         |
-| `opencode`    | `opencode --session <id>`                                   | `~/.local/share/opencode/opencode.db`            |
-| `antigravity` | cmux가 기록한 실행 인자 재사용                              | `~/.gemini/antigravity-cli/conversations/<id>.*` |
-| 그 외         | 실행 인자에 세션 식별자가 있으면 재사용                     | 확인 불가 (판정 보류)                            |
+| 에이전트          | 재개 명령어                                                     | 세션 데이터 확인 위치                                     |
+| :------------ | :--------------------------------------------------------- | :----------------------------------------------- |
+| `claude`      | `claude --resume <id>` / live bg는 `claude attach <job-id>` | `~/.claude/projects/<슬러그>/<id>.jsonl`            |
+| `opencode`    | `opencode --session <id>`                                  | `~/.local/share/opencode/opencode.db`            |
+| `pi`          | `pi --session <파일 경로>`                                     | 기록된 파일 또는 cwd 범위에서 ID가 일치하는 파일의 헤더                 |
+| `antigravity` | cmux가 기록한 실행 인자 재사용                                        | `~/.gemini/antigravity-cli/conversations/<id>.*` |
+| 그 외           | 실행 인자에 세션 식별자가 있으면 재사용                                     | 확인 불가 (판정 보류)                                    |
 
 목록에 없는 에이전트라도 cmux가 기록한 실행 인자에 세션 식별자가 포함되어 있으면 그 인자를 그대로 재사용해 재개 명령어를 만듭니다. 식별자가 없으면 "재개 방법 미상"으로 표시하되, 작업 경로와 세션 ID는 남겨 수동 복구를 돕습니다.
 
@@ -42,6 +43,8 @@ cmux는 종료 시 각 패널의 에이전트 세션 정보를 자체 파일에 
 | `/cube-cmux restore 3` | 저장 당시 3번 복구 후보의 명령 복사 (필요 시 경고) |
 
 `list`는 실행 중인 에이전트만을 뜻하지 않습니다. 종료된 에이전트의 binding 기록도 포함될 수 있습니다. 각 패널에는 재개 대상 ID 하나만 표시합니다. Claude 대화의 명시적 이어짐 기록을 검증하면 이어진 ID를 사용하며, bg라는 종류만으로 우선하지 않습니다. ID를 찾지 못한 패널은 저장에서 제외하고 진단으로 안내합니다.
+
+pi는 파일 경로와 전체 세션 ID를 모두 지원합니다. 목록에는 검증한 헤더 ID의 앞 8글자를 표시하며, 확인하지 못하면 "확인 불가"로 표시합니다. 파일명·부분 ID·수정 시각으로 대상을 추정하지 않습니다. 검증한 파일 경로로 복구 명령을 만들고 새 저장 JSON의 `sessionId`에도 그 경로를 기록하여 구형 저장과 비교합니다. 서로 다른 패널이 같은 재개 대상을 가리키면 각각 남기되 연결 중복 경고와 `?`를 표시하고 자동 복사하지 않습니다. 실제로 같은 세션을 두 패널에서 쓰는 경우도 보수적으로 보류됩니다.
 
 `restore`의 자동 복사는 전체 복구 후보가 1개이고 관측이 완전한 누락이며 저장 당시 `recorded`이고 재개 대상 검증도 불완전하지 않을 때만 합니다. 번호 지정은 확인 필요 항목도 경고 후 복사합니다. 번호는 저장 당시 순서를 유지하며, 명령은 사용자가 검토 후 각각 다른 패널에서 실행해야 합니다.
 
@@ -70,6 +73,7 @@ python3 "$SKILL_DIR/scripts/cmux_session.py" [list|save|status|restore] [번호]
 - **Continuation Safety:** 실제 이어짐을 발견했지만 원래 대화의 재진행, 서로 다른 이어짐 대상, 후속 대상 중복·손상·조회 실패, 경로 불일치, runtime 충돌, 순환·깊이 제한이 있으면 판정을 보류합니다. 저장 항목의 이전 ID도 명령 시점의 대화 기록으로 확인하며, 공통 조상 또는 저장된 `parked`/이어짐 필드만으로 두 세션을 동치 처리하지 않습니다.
 - **Live Background Sessions:** 현재 runtime에서 유일하게 확인된 bg는 `restore`에서 `claude attach <job-id>`를 안내합니다. 패널이 없어도 해당 runtime이 살아 있으면 누락 확정 대신 확인 필요로 처리하고 자동 복사하지 않습니다. 종료된 대화와 저장 Markdown의 기본 명령은 `claude --resume <session-id>`입니다. 실제 resume/attach 실행은 사용자에게 맡깁니다.
 - **Uncertain Restore:** 자동 복사는 복구 후보가 전체 1개이고 관측이 완전한 누락이며 저장 당시 `recorded`이고 재개 대상 검증도 불완전하지 않을 때만 합니다. 추정·확인 필요 항목과 이어짐 조회 불완전 항목은 자동 복사하지 않습니다. 사용자가 번호를 지정하면 경고 후 복사하므로, 이미 실행 중이거나 ID가 추정·오래된 기록일 수 있다는 안내를 확인하세요.
+- **Pi File Recovery:** 기록된 절대 `.jsonl` 경로 또는 전체 ID에 정확히 대응하는 파일로 `pi --session <경로>`를 생성하며, 실행 인자에 세션 경로가 없어도 지원합니다. 직접 경로의 파일 없음은 `!`, 정상 헤더는 데이터 있음, 권한 오류·손상·미완성·지원하지 않는 형식·상대 작업 경로·작업 경로 불일치는 확인 불가로 처리합니다. ID 조회는 일치 파일이 정확히 하나이고 조회가 완전할 때만 성공하며, 파일 없음·중복·조회 오류는 탐색 범위 밖 저장소를 배제할 수 없어 확인 불가로 둡니다. 파일 검증 실패·작업 경로 확인 불가·패널 연결 중복은 자동 복사를 막지만 번호 지정은 경고 후 복사합니다. 헤더 확인만으로 binding을 `recorded`로 승격하거나 실행 중이라고 판정하지 않습니다.
 - **Incomplete Observation:** 현재 패널 쪽에 ID 없는 패널, 조회 실패, 모호한 연결이 있으면 누락 확정 대신 확인 필요로 처리합니다. 저장 항목 자신의 데이터 존재 여부 probe 실패만으로는 보류하지 않으므로, 저장 위치를 모르는 에이전트도 사라지면 누락으로 판정됩니다. agent가 없는 비-Claude binding은 실행 연결 확인 수단이 없어 보수적으로 `unknown`으로 둡니다. 시작 ID에서 이어짐을 발견하지 못한 단순 JSONL 조회 실패는 기존 ID와 연결 판정을 유지하고 경고만 남깁니다. 같은 키의 현재 recorded 패널과는 일치를 유지하지만, 읽지 못했다는 것이 이어짐이 없다는 뜻은 아니므로 재개 불확실성은 별도로 자동 복사를 막습니다. 실제 이어짐을 발견한 뒤 검증에 실패하면 `unknown`으로 낮춥니다.
 - **Exited Agent Panels:** cmux는 에이전트가 종료된 패널에도 `resumeBinding`을 남길 수 있습니다. 이런 패널도 수집되어 `?`로 표시되고 저장됩니다. 사용자가 직접 에이전트를 종료한 패널이라면 무시해도 되며, 같은 경로의 다른 패널에 대한 경로 추정이 보류될 수 있습니다.
 - **Unknown Agents:** cmux 연동이 없는 에이전트는 cmux 자체 복원이 동작하지 않으므로, 재시작 후 그 패널이 사라졌다면 이 스킬의 명령어가 유일한 복구 수단입니다. "재개 방법 미상"으로 표시된 경우에는 명령어 대신 작업 경로와 세션 ID를 근거로 수동 복구를 안내하세요.
@@ -88,10 +92,11 @@ python3 "$SKILL_DIR/scripts/cmux_session.py" [list|save|status|restore] [번호]
 - **저장 위치:** `~/Desktop/cmux-sessions-<YYMMDD-HHMM>.md` (디렉토리는 환경변수 `CUBE_CMUX_SAVE_DIR`로 변경 가능)
 - **파일 선택:** `save`는 실행할 때마다 새 파일을 만들고, `status`와 `restore`는 **가장 최근 파일**을 자동으로 선택합니다.
 - **파일 수명:** 복구를 마친 파일은 삭제해도 됩니다. 자동으로 지우지 않으므로 바탕화면 정리는 사용자가 직접 합니다.
-- **읽는 파일:** 패널 목록은 `~/Library/Application Support/cmux/session-com.cmuxterm.app.json`에서 읽습니다. Claude 연결 보완을 위해 `~/.claude/sessions/*.json`, 대화 이어짐 검증과 데이터 판정에는 `~/.claude/projects/`의 JSONL을 조회합니다. 다른 에이전트 데이터는 `~/.local/share/opencode/opencode.db`, `~/.gemini/antigravity-cli/conversations/`에서 확인합니다. **모두 읽기 전용이며 cmux나 에이전트 설정을 수정하지 않습니다.**
+- **읽는 파일:** 패널 목록은 `~/Library/Application Support/cmux/session-com.cmuxterm.app.json`에서 읽습니다. Claude 연결 보완을 위해 `~/.claude/sessions/*.json`, 대화 이어짐 검증과 데이터 판정에는 `~/.claude/projects/`의 JSONL을 조회합니다. pi는 직접 기록된 파일과 `~/.pi/agent/sessions/`의 해당 cwd 디렉토리, 같은 cwd의 검증된 현재·저장 경로가 속한 디렉토리에서 JSONL 첫 줄만 읽습니다. 다른 에이전트 데이터는 `~/.local/share/opencode/opencode.db`, `~/.gemini/antigravity-cli/conversations/`에서 확인합니다. **모두 읽기 전용이며 cmux나 에이전트 설정을 수정하지 않습니다.**
 - **내부 형식 한계:** Claude runtime 파일은 로컬에서 관찰한 내부 형식이며 공식 지원 계약으로 취급하지 않습니다. 파일 손상·형식 오류·조회 실패 시 해당 범위의 추정을 보류하고 agent/binding 기록을 유지합니다. PID 존재 확인은 프로세스 동일성의 증명이 아니며 PID 재사용 위험이 있습니다. 에이전트 sandbox 안에서 실행하면 다른 프로세스의 PID 확인이 권한 오류로 끝나므로, runtime 기록을 근거로 연결한 패널에만 "PID 확인 제한" 경고가 붙습니다.
 - **경로 추정 한계:** 미확정 패널과 미예약 interactive 세션이 양쪽 모두 정확히 하나일 때만 연결합니다. 그래도 같은 경로에서 실행한 cmux 밖 Claude와 완전히 구분할 수 없으므로 `inferred`로 남깁니다. 경로 불명 미확정 Claude 패널은 전체 추정을 보류합니다.
 - **이어짐 형식 한계:** `continued-in`은 로컬에서 관찰한 내부 기록이며 공식 지원 계약이 아닙니다. JSONL은 스트리밍으로 읽고 본문을 저장하지 않으며, 명령 안에서 조회를 캐시합니다. JSON 파서 중첩 제한·파일 32 MiB 한도 초과·중복·조회 실패는 시작 ID의 연결을 무조건 낮추지 않고 위 불완전 관측 정책을 따릅니다. 연결 16개 한도 초과는 실제 이어짐 검증 실패로 보류합니다. 마지막 줄은 줄바꿈이 없어도 완전한 JSON이면 검증하며, EOF의 미완성 JSON만 작성 중으로 처리합니다. 실제 이어짐 이후 또는 후속 대상에 미완성 꼬리가 있으면 보류합니다. 과거 작업 경로가 여러 개라는 이유만으로 대화를 무효화하지 않고 마지막 대화 메시지의 경로로 관계를 검증합니다.
+- **pi 조회 한계:** 첫 줄을 최대 64 KiB로 제한하고 헤더의 `type`, ID, cwd와 버전 1·2·3을 확인합니다. 버전 생략은 레거시 1로 취급합니다. 줄바꿈 없는 완전한 JSON도 허용하며, 파서 중첩 제한·크기 초과·제어 문자가 있는 ID·비정규 파일은 확인 불가입니다. 대화 본문 무결성·실행 상태는 확인하지 않습니다. ID만 기록된 경우 해당 cwd의 기본 저장소와 같은 cwd의 검증한 기록 디렉토리만 조회하며, 전체 ID·헤더 cwd가 일치하는 파일 하나만 채택합니다. 후보는 cwd 조회 범위마다 최대 256개이며, 목록 조회·순회 실패·한도 초과·후보 헤더 오류는 부분 결과를 확정하지 않고 보류합니다. 처음부터 없는 조회 디렉토리는 건너뛰지만, 열린 뒤의 순회 중 파일 없음 오류는 조회 불완전으로 처리합니다. 디렉토리 목록과 헤더를 명령 안에서 캐시하고, 저장 경로가 조회 범위에 추가되면 ID의 유일성을 재검증합니다. 다른 cwd의 저장소·설정·환경변수는 검색하지 않습니다. 사용자 지정 저장소는 검증한 파일 경로가 기록에 있을 때만 제한적으로 지원합니다. ID 조회에 실패하면 기존 실행 인자 재사용 방식은 유지하되 자동 복사는 제한합니다. fork·clone·공통 부모나 헤더 ID만으로 서로 다른 파일을 같은 세션으로 합치지 않습니다. [공식 CLI 문서](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/cli.md#sessions), [세션 형식](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/session-format.md)을 참고하세요.
 - **구형 저장 호환:** 예전 `parked` 필드는 읽지만 자동 선택 근거로 쓰지 않고 새 저장 JSON에서는 제외합니다. 새 저장은 최종 `sessionId`를 복구 대상으로 사용하며, ID가 바뀌면 `originSessionId`와 검증된 `continuation`을 연결 근거로 남깁니다. 원본 저장 파일을 자동 수정하지 않습니다.
 - **명령의 버전 차이:** 실행 중인 bg에 대한 `--resume` 동작은 버전에 따라 다릅니다. 따라서 확인된 live bg에는 attach를 안내합니다. [공식 재개 문서](https://code.claude.com/docs/en/sessions#resume-a-running-background-session), [bg attach 설명](https://code.claude.com/docs/en/agent-view#attach-to-a-session)을 참고하세요.
 - **저장 내용:** 세션 ID, 작업 경로, 워크스페이스·패널 이름을 저장합니다. 표준 재개 명령이 없는 에이전트는 cmux가 기록한 실행 인자도 포함될 수 있으므로 자격 증명을 CLI 인자로 전달하지 마세요.
@@ -116,4 +121,4 @@ python3 -m unittest discover -s skills/cube-cmux/tests -p 'test_*.py' -v
 
 ---
 
-**Updated At:** 2026. 10. 6.
+**Updated At:** 2026. 10. 12.

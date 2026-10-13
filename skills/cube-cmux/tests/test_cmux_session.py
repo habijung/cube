@@ -6,7 +6,9 @@ import io
 import json
 import os
 from pathlib import Path
+import shlex
 import sqlite3
+import stat
 import sys
 import tempfile
 import unittest
@@ -27,9 +29,11 @@ class SessionTests(unittest.TestCase):
         self.runtime = self.root / "runtime"
         self.conversations = self.root / "conversations"
         self.save = self.root / "save"
-        for path in (self.projects, self.runtime, self.conversations, self.save):
+        self.pi_sessions = self.root / "pi-sessions"
+        for path in (self.projects, self.runtime, self.conversations, self.save, self.pi_sessions):
             path.mkdir()
         constants = {
+            "PI_SESSIONS": str(self.pi_sessions),
             "CLAUDE_PROJECTS": str(self.projects), "CLAUDE_RUNTIME": str(self.runtime),
             "ANTIGRAVITY_CONVERSATIONS": str(self.conversations),
             "OPENCODE_DB": str(self.root / "opencode.db"),
@@ -90,6 +94,594 @@ class SessionTests(unittest.TestCase):
                 contextlib.redirect_stdout(io.StringIO()) as output:
             cmux.cmd_restore(arg)
         return output.getvalue()
+
+    def pi_file(self, name="session.jsonl", **fields):
+        path = self.root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        header = dict(type="session", version=3, id="custom-session", cwd="/work")
+        header.update(fields)
+        path.write_text(json.dumps(header) + "\n", encoding="utf-8")
+        return str(path)
+
+    def pi_stored_file(self, sid="custom-session", cwd="/work", name="unrelated.jsonl"):
+        slug = "--" + cwd.lstrip("/").replace("/", "-").replace(":", "-") + "--"
+        directory = self.pi_sessions / slug
+        directory.mkdir(parents=True, exist_ok=True)
+        return self.pi_file(name=str(directory / name), id=sid, cwd=cwd)
+
+    def test_pi_id_lookup_matches_legacy_path_and_keeps_raw_id(self):
+        path = self.pi_stored_file()
+        snapshot = self.resolve([self.candidate(sid="custom-session", kind="pi")])
+        panel = snapshot["panels"][0]
+        self.assertEqual(panel["sessionId"], "custom-session")
+        self.assertEqual(panel["_pi_display_id"], "custom-session")
+        self.assertEqual(panel["_pi_resolved_path"], cmux.normalized_path(path))
+        self.assertEqual(shlex.split(cmux.resume_command(panel)),
+                         ["cd", "/work", "&&", "pi", "--session", cmux.normalized_path(path)])
+        result = self.compare([self.saved_panel(path, kind="pi")], snapshot)
+        self.assertEqual(len(result["matched"]), 1)
+        self.assertEqual(result["added"], [])
+        self.assertIn("누락 또는 확인 필요 항목이 없습니다.",
+                      self.restore([self.saved_panel(path, kind="pi")], snapshot))
+        self.copy_mock.assert_not_called()
+
+    def test_pi_mixed_paths_and_ids_display_distinct_sessions(self):
+        paths = [self.pi_stored_file(sid=sid, name=f"{sid}.jsonl") for sid in ("first", "second")]
+        snapshot = self.resolve([self.candidate(sid=paths[0], kind="pi", title="a"),
+                                 self.candidate(sid="second", kind="pi", title="b")])
+        self.assertEqual([cmux.display_session_id(p) for p in snapshot["panels"]],
+                         ["first", "second"])
+        result = self.compare([self.saved_panel(p, kind="pi") for p in paths], snapshot)
+        self.assertEqual(len(result["matched"]), 2)
+        self.assertEqual(result["uncertain"], [])
+
+    def test_pi_id_save_roundtrip_uses_verified_path(self):
+        path = self.pi_stored_file()
+        snapshot = self.resolve([self.candidate(sid="custom-session", kind="pi")])
+        saved_path = cmux.write_save_file(snapshot["panels"], snapshot["probe_cache"])
+        saved = cmux.read_save_file(saved_path)
+        self.assertEqual(saved["panels"][0]["sessionId"], cmux.normalized_path(path))
+        self.assertIn(cmux.resume_command(saved["panels"][0]), Path(saved_path).read_text())
+        self.assertNotIn("_pi_resolved_path", Path(saved_path).read_text())
+        self.assertEqual(snapshot["panels"][0]["sessionId"], "custom-session")
+
+    def test_pi_id_lookup_does_not_use_filename_or_partial_id(self):
+        self.pi_stored_file(sid="different", name="custom-session.jsonl")
+        self.pi_stored_file(sid="custom-session-longer", name="other.jsonl")
+        self.assertEqual(cmux.probe_session_data("pi", "custom-session", "/work"), "unknown")
+
+    def test_pi_id_lookup_duplicate_headers_are_unknown(self):
+        self.pi_stored_file(name="a.jsonl")
+        self.pi_stored_file(name="b.jsonl")
+        panel = self.resolve([self.candidate(sid="custom-session", kind="pi")])["panels"][0]
+        self.assertTrue(panel["_resume_unverified"])
+        self.assertNotIn("_pi_resolved_path", panel)
+        self.assertNotIn("_pi_display_id", panel)
+
+    def test_pi_id_lookup_incomplete_directory_blocks_unique_match(self):
+        self.pi_stored_file()
+        bad = self.pi_stored_file(sid="another", name="broken.jsonl")
+        Path(bad).write_text("{")
+        self.assertEqual(cmux.probe_session_data("pi", "custom-session", "/work"), "unknown")
+
+    def test_pi_id_lookup_file_limit_blocks_partial_results(self):
+        self.pi_stored_file()
+        self.pi_stored_file(sid="other", name="other.jsonl")
+        with mock.patch.object(cmux, "PI_LOOKUP_FILE_LIMIT", 1):
+            self.assertEqual(cmux.probe_session_data("pi", "custom-session", "/work"), "unknown")
+
+    def test_pi_id_lookup_requires_absolute_matching_cwd(self):
+        self.pi_stored_file()
+        for cwd in (None, "relative", "/elsewhere"):
+            with self.subTest(cwd=cwd):
+                self.assertEqual(cmux.probe_session_data("pi", "custom-session", cwd), "unknown")
+
+    def test_pi_id_lookup_is_cached_and_fresh_cache_revalidates(self):
+        path = self.pi_stored_file()
+        panel = self.saved_panel("custom-session", kind="pi")
+        cache = {}
+        with mock.patch("builtins.open", wraps=open) as opened:
+            self.assertEqual(cmux.cached_probe(cache, panel), "exists")
+            self.assertEqual(cmux.cached_probe(cache, panel), "exists")
+            opened.assert_called_once()
+        Path(path).write_text("{")
+        self.assertEqual(cmux.cached_probe({}, panel), "unknown")
+        self.assertNotIn("_pi_resolved_path", panel)
+        self.assertNotIn("_pi_display_id", panel)
+
+    def test_pi_id_lookup_uses_verified_recorded_directory(self):
+        path = self.pi_file(id="known")
+        snapshot = self.resolve([self.candidate(sid=path, kind="pi", title="path"),
+                                 self.candidate(sid="known", kind="pi", title="id")])
+        self.assertEqual(snapshot["panels"][1]["_pi_resolved_path"], cmux.normalized_path(path))
+        self.assertTrue(all(p["resolution"] == "unknown" for p in snapshot["panels"]))
+        result = self.compare([self.saved_panel(path, kind="pi")], snapshot)
+        self.assertEqual(len(result["uncertain"]), 1)
+        self.restore([self.saved_panel(path, kind="pi")], snapshot)
+        self.copy_mock.assert_not_called()
+
+    def test_pi_id_binding_is_not_promoted(self):
+        self.pi_stored_file()
+        panel = self.resolve([self.candidate(checkpoint="custom-session", kind="pi")])["panels"][0]
+        self.assertEqual(panel["resolution"], "unknown")
+        self.assertEqual(panel["source"], "binding")
+        self.assertEqual(panel["_pi_display_id"], "custom-session")
+
+    def test_pi_unresolved_same_id_is_uncertain_not_matched(self):
+        self.pi_stored_file(name="a.jsonl")
+        self.pi_stored_file(name="b.jsonl")
+        snapshot = self.resolve([self.candidate(sid="custom-session", kind="pi")])
+        result = self.compare([self.saved_panel("custom-session", kind="pi")], snapshot)
+        self.assertEqual(len(result["uncertain"]), 1)
+        self.assertEqual(result["matched"], [])
+        self.restore([self.saved_panel("custom-session", kind="pi")], snapshot)
+        self.copy_mock.assert_not_called()
+
+    def test_pi_saved_path_addition_revalidates_id_uniqueness(self):
+        first = self.pi_stored_file()
+        snapshot = self.resolve([self.candidate(sid="custom-session", kind="pi")])
+        extra = self.pi_file(name="different/extra.jsonl")
+        result = self.compare([self.saved_panel(first, kind="pi"),
+                               self.saved_panel(extra, kind="pi")], snapshot)
+        self.assertEqual(result["matched"], [])
+        self.assertEqual(len(result["uncertain"]), 2)
+        self.assertNotIn("_pi_resolved_path", snapshot["panels"][0])
+
+    def test_pi_id_lookup_permission_error_blocks_unique_match(self):
+        self.pi_stored_file()
+        with mock.patch.object(cmux.os, "scandir", side_effect=PermissionError):
+            self.assertEqual(cmux.probe_session_data("pi", "custom-session", "/work"), "unknown")
+
+    def test_pi_id_lookup_bad_cwd_and_unsupported_header(self):
+        path = self.pi_stored_file()
+        for fields in (dict(cwd="/elsewhere"), dict(version=99)):
+            with self.subTest(fields=fields):
+                self.pi_file(name=path, **fields)
+                self.assertEqual(cmux.probe_session_data("pi", "custom-session", "/work"),
+                                 "unknown")
+
+    def test_pi_id_lookup_non_regular_candidate_is_unknown(self):
+        self.pi_stored_file()
+        directory = self.pi_sessions / "--work--" / "pipe.jsonl"
+        os.mkfifo(directory)
+        self.assertEqual(cmux.probe_session_data("pi", "custom-session", "/work"), "unknown")
+
+    def test_pi_id_lookup_control_and_path_identifiers_are_not_scanned(self):
+        with mock.patch.object(cmux.os, "scandir") as scanned:
+            for value in ("partial/id", "..", "id\\\\tail", "id\n", "id\x7f", "relative.jsonl"):
+                self.assertEqual(cmux.probe_session_data("pi", value, "/work"), "unknown")
+            scanned.assert_not_called()
+
+    def test_pi_id_lookup_shared_cwd_reads_each_header_once(self):
+        self.pi_stored_file(sid="first", name="one.jsonl")
+        self.pi_stored_file(sid="second", name="two.jsonl")
+        cache = {}
+        with mock.patch("builtins.open", wraps=open) as opened, \
+                mock.patch.object(cmux.os, "scandir", wraps=os.scandir) as scanned:
+            for sid in ("first", "second"):
+                self.assertEqual(cmux.cached_probe(cache, self.saved_panel(sid, kind="pi")),
+                                 "exists")
+            self.assertEqual(opened.call_count, 2)
+            self.assertEqual(scanned.call_count, 1)
+
+    def test_pi_id_lookup_unknown_warns_and_explicit_copy_never_executes(self):
+        panel = self.saved_panel("custom-session", kind="pi")
+        panel["launchArgs"] = ["pi", "--session", "custom-session"]
+        with mock.patch.object(cmux.subprocess, "run") as run:
+            output = self.restore([panel], self.resolve([]), "1")
+        self.assertIn("pi 세션 파일 검증이 불완전", output)
+        self.copy_mock.assert_called_once_with("cd /work && pi --session custom-session")
+        run.assert_not_called()
+
+    def test_pi_duplicate_saved_targets_keep_unknown_and_do_not_auto_copy(self):
+        path = self.pi_file()
+        snapshot = self.resolve([self.candidate(sid=path, kind="pi", title="a"),
+                                 self.candidate(sid=path, kind="pi", title="b")])
+        saved_path = cmux.write_save_file(snapshot["panels"], snapshot["probe_cache"])
+        saved = cmux.read_save_file(saved_path)
+        self.assertEqual(len(saved["panels"]), 2)
+        self.assertTrue(all(p["resolution"] == "unknown" for p in saved["panels"]))
+        self.restore([saved["panels"][0]], self.resolve([]))
+        self.copy_mock.assert_not_called()
+
+    def test_pi_id_lookup_same_file_alias_is_not_duplicate_header(self):
+        path = self.pi_stored_file()
+        alias = Path(path).parent / "alias.jsonl"
+        alias.symlink_to(path)
+        with mock.patch("builtins.open", wraps=open) as opened:
+            self.assertEqual(cmux.probe_session_data("pi", "custom-session", "/work"), "exists")
+            opened.assert_called_once()
+
+    def test_pi_path_and_id_share_canonical_header_cache(self):
+        path = self.pi_stored_file()
+        with mock.patch("builtins.open", wraps=open) as opened:
+            self.resolve([self.candidate(sid=path, kind="pi", title="path"),
+                          self.candidate(sid="custom-session", kind="pi", title="id")])
+            opened.assert_called_once()
+
+    def test_pi_default_directory_does_not_mix_symlink_cwd_caches(self):
+        cwd = self.root / "work"
+        cwd.mkdir()
+        alias = self.root / "alias"
+        alias.symlink_to(cwd, target_is_directory=True)
+        self.pi_stored_file(cwd=str(cwd))
+        cache = {}
+        real_panel = self.saved_panel("custom-session", kind="pi", cwd=str(cwd))
+        alias_panel = self.saved_panel("custom-session", kind="pi", cwd=str(alias))
+        self.assertEqual(cmux.cached_probe(cache, real_panel), "exists")
+        self.assertEqual(cmux.cached_probe(cache, alias_panel), "unknown")
+        self.pi_stored_file(cwd=str(alias))
+        self.assertEqual(cmux.cached_probe({}, alias_panel), "exists")
+
+    def test_pi_relative_cwd_never_verifies_or_auto_copies(self):
+        for cwd in (".", "relative"):
+            with self.subTest(cwd=cwd):
+                self.copy_mock.reset_mock()
+                path = self.pi_file(cwd=os.path.abspath(cwd))
+                panel = self.saved_panel(path, kind="pi", cwd=cwd)
+                self.assertEqual(cmux.cached_probe({}, panel), "unknown")
+                self.assertTrue(panel["_resume_unverified"])
+                output = self.restore([panel], self.resolve([]))
+                self.assertIn("pi 세션 파일 검증이 불완전", output)
+                self.copy_mock.assert_not_called()
+
+    def test_pi_iteration_file_not_found_blocks_partial_unique_match(self):
+        path = self.pi_stored_file(name="first.jsonl")
+        self.pi_stored_file(name="second.jsonl")
+        entry = mock.Mock()
+        entry.name, entry.path = "first.jsonl", path
+
+        def broken_listing():
+            yield entry
+            raise FileNotFoundError("failed before second entry")
+
+        stream = mock.MagicMock()
+        stream.__enter__.return_value = broken_listing()
+        with mock.patch.object(cmux.os, "scandir", return_value=stream), \
+                mock.patch("builtins.open", wraps=open) as opened:
+            self.assertEqual(cmux.probe_session_data("pi", "custom-session", "/work"),
+                             "unknown")
+            opened.assert_not_called()
+        stream.__exit__.assert_called_once()
+
+    def test_pi_header_supported_versions_and_legacy(self):
+        for version in (1, 2, 3, None):
+            with self.subTest(version=version):
+                path = self.pi_file(version=version)
+                if version is None:
+                    header = json.loads(Path(path).read_text())
+                    header.pop("version")
+                    Path(path).write_text(json.dumps(header))
+                metadata = cmux.load_pi_session_header(path, {})
+                self.assertEqual(metadata, dict(state="exists", id="custom-session", cwd="/work"))
+                self.assertEqual(cmux.probe_session_data("pi", path, "/work"), "exists")
+
+    def test_pi_complete_header_without_newline_and_no_body_read(self):
+        path = self.pi_file()
+        header = Path(path).read_bytes().rstrip(b"\n")
+        for content in (header, header + b"\n" + b"invalid body\xff" * 10000):
+            with self.subTest(body=len(content) > len(header)):
+                Path(path).write_bytes(content)
+                self.assertEqual(cmux.probe_session_data("pi", path, "/work"), "exists")
+
+    def test_pi_invalid_headers_are_unknown(self):
+        invalid = [
+            {}, [], None, dict(type="message", id="id", cwd="/work"),
+            dict(type="session", version=4, id="id", cwd="/work"),
+            dict(type="session", version=True, id="id", cwd="/work"),
+            dict(type="session", version="3", id="id", cwd="/work"),
+            dict(type="session", version=None, id="id", cwd="/work"),
+            dict(type="session", id="", cwd="/work"),
+            dict(type="session", id=123, cwd="/work"),
+            dict(type="session", id="id", cwd="relative"),
+            dict(type="session", id="id", cwd=None),
+        ]
+        path = self.pi_file()
+        for header in invalid:
+            with self.subTest(header=header):
+                Path(path).write_text(json.dumps(header))
+                self.assertEqual(cmux.probe_session_data("pi", path, "/work"), "unknown")
+
+    def test_pi_control_characters_in_id_are_unknown(self):
+        for character in ("\x00", "\n", "\r", "\t", "\x1b", "\x7f", "\x9b"):
+            with self.subTest(character=repr(character)):
+                path = self.pi_file(id="id" + character + "tail")
+                self.assertEqual(cmux.probe_session_data("pi", path, "/work"), "unknown")
+
+    def test_pi_corrupt_empty_partial_and_invalid_utf8_headers(self):
+        path = self.pi_file()
+        for content in (b"", b"\n", b"{", b'{"type":"session"', b"\xff\n"):
+            with self.subTest(content=content):
+                Path(path).write_bytes(content)
+                self.assertEqual(cmux.probe_session_data("pi", path, "/work"), "unknown")
+
+    def test_pi_header_size_limit(self):
+        path = self.pi_file()
+        header = Path(path).read_bytes().rstrip(b"\n")
+        Path(path).write_bytes(header)
+        with mock.patch.object(cmux, "PI_HEADER_LIMIT", len(header)):
+            self.assertEqual(cmux.probe_session_data("pi", path, "/work"), "exists")
+            Path(path).write_bytes(header + b" ")
+            self.assertEqual(cmux.probe_session_data("pi", path, "/work"), "unknown")
+
+    def test_pi_missing_permission_and_directory_states(self):
+        path = self.pi_file()
+        with mock.patch("builtins.open", side_effect=PermissionError):
+            self.assertEqual(cmux.probe_session_data("pi", path, "/work"), "unknown")
+        directory = self.root / "directory.jsonl"
+        directory.mkdir()
+        self.assertEqual(cmux.probe_session_data("pi", str(directory), "/work"), "unknown")
+        Path(path).unlink()
+        self.assertEqual(cmux.probe_session_data("pi", path, "/work"), "absent")
+
+    def test_pi_header_read_is_bounded_to_first_line(self):
+        path = self.pi_file()
+        stream = mock.MagicMock()
+        stream.__enter__.return_value = stream
+        stream.readline.return_value = Path(path).read_bytes()
+        with mock.patch("builtins.open", return_value=stream):
+            self.assertEqual(cmux.probe_session_data("pi", path, "/work"), "exists")
+        stream.readline.assert_called_once_with(cmux.PI_HEADER_LIMIT + 1)
+        stream.read.assert_not_called()
+        stream.readlines.assert_not_called()
+
+    def test_pi_non_regular_files_are_not_opened(self):
+        path = str(self.root / "pipe.jsonl")
+        with mock.patch.object(cmux.os, "stat", return_value=mock.Mock(st_mode=stat.S_IFIFO)), \
+                mock.patch("builtins.open") as opened:
+            self.assertEqual(cmux.probe_session_data("pi", path, "/work"), "unknown")
+        opened.assert_not_called()
+
+    def test_pi_header_missing_during_open_is_absent_and_cached(self):
+        path = self.pi_file()
+        cache = {}
+        with mock.patch("builtins.open", side_effect=FileNotFoundError) as opened:
+            self.assertEqual(cmux.load_pi_session_header(path, cache)["state"], "absent")
+            self.assertEqual(cmux.load_pi_session_header(path, cache)["state"], "absent")
+            opened.assert_called_once()
+
+    def test_pi_parser_recursion_is_unknown(self):
+        path = self.pi_file()
+        with mock.patch.object(cmux.json, "loads", side_effect=RecursionError):
+            self.assertEqual(cmux.probe_session_data("pi", path, "/work"), "unknown")
+
+    def test_pi_non_file_identifiers_are_not_searched(self):
+        with mock.patch("builtins.open") as opened:
+            for value in ("id", "relative.jsonl", "~/session.jsonl", "/work/file.db", None):
+                with self.subTest(value=value):
+                    self.assertEqual(cmux.probe_session_data("pi", value, "/work"), "unknown")
+            opened.assert_not_called()
+
+    def test_pi_cwd_validation_and_unknown_panel_cwd(self):
+        path = self.pi_file()
+        self.assertEqual(cmux.probe_session_data("pi", path, "/work/../work"), "exists")
+        self.assertEqual(cmux.probe_session_data("pi", path, None), "exists")
+        self.assertEqual(cmux.probe_session_data("pi", path, "/elsewhere"), "unknown")
+
+    def test_pi_symlink_cwd_matches(self):
+        real = self.root / "real"
+        real.mkdir()
+        alias = self.root / "alias"
+        alias.symlink_to(real, target_is_directory=True)
+        path = self.pi_file(cwd=str(real))
+        self.assertEqual(cmux.probe_session_data("pi", path, str(alias)), "exists")
+
+    def test_pi_duplicate_panels_share_header_read_not_identity(self):
+        path = self.pi_file()
+        candidates = [self.candidate(sid=path, kind="pi", title=name) for name in ("a", "b")]
+        with mock.patch("builtins.open", wraps=open) as opened:
+            snapshot = self.resolve(candidates)
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                cmux.print_panel_rows(snapshot["panels"], snapshot["probe_cache"])
+                cmux.print_diagnostics(snapshot)
+            self.assertEqual(opened.call_count, 1)
+        self.assertEqual(len(snapshot["panels"]), 2)
+        self.assertEqual([p["sessionId"] for p in snapshot["panels"]], [path, path])
+        self.assertEqual(output.getvalue().count("custom-s"), 4)
+        self.assertNotIn("조회 불가", output.getvalue())
+        self.assertIn("pi 패널 연결 중복", output.getvalue())
+        for panel in snapshot["panels"]:
+            self.assertEqual(panel["resolution"], "unknown")
+            self.assertTrue(panel["_resume_unverified"])
+        self.restore([self.saved_panel(path, kind="pi")], snapshot)
+        self.copy_mock.assert_not_called()
+
+    def test_pi_header_cache_does_not_share_cwd_verdict(self):
+        path = self.pi_file()
+        panels = [self.saved_panel(path, kind="pi", cwd=cwd) for cwd in ("/work", "/other")]
+        cache = {}
+        with mock.patch("builtins.open", wraps=open) as opened:
+            self.assertEqual(cmux.cached_probe(cache, panels[0]), "exists")
+            self.assertEqual(cmux.cached_probe(cache, panels[1]), "unknown")
+            self.assertEqual(opened.call_count, 1)
+        self.assertNotIn("_resume_unverified", panels[0])
+        self.assertTrue(panels[1]["_resume_unverified"])
+
+    def test_pi_binding_header_does_not_promote_resolution(self):
+        path = self.pi_file()
+        panel = self.resolve([self.candidate(checkpoint=path, kind="pi")])["panels"][0]
+        self.assertEqual((panel["sessionId"], panel["source"], panel["resolution"]),
+                         (path, "binding", "unknown"))
+        self.assertEqual(panel["_pi_display_id"], "custom-session")
+
+    def test_pi_unknown_header_keeps_recorded_path_and_match(self):
+        path = self.pi_file(version=99)
+        snapshot = self.resolve([self.candidate(sid=path, kind="pi")])
+        panel = snapshot["panels"][0]
+        self.assertEqual((panel["sessionId"], panel["resolution"]), (path, "recorded"))
+        self.assertTrue(panel["_resume_unverified"])
+        result = self.compare([self.saved_panel(path, kind="pi")], snapshot)
+        self.assertEqual(len(result["matched"]), 1)
+
+    def test_pi_display_and_diagnostic_use_same_verified_id(self):
+        path = self.pi_file(id="actual-header-id")
+        snapshot = self.resolve([self.candidate(sid=path, kind="pi")])
+        panel = snapshot["panels"][0]
+        panel["warnings"].append("test warning")
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            cmux.print_panel_rows(snapshot["panels"], snapshot["probe_cache"])
+            cmux.print_diagnostics(snapshot)
+        self.assertEqual(output.getvalue().count("actual-h"), 2)
+        self.assertNotIn(path[:8], output.getvalue())
+
+    def test_pi_unverified_display_does_not_guess_id_from_filename(self):
+        path = self.pi_file(name="timestamp_guessed-id.jsonl", version=99)
+        snapshot = self.resolve([self.candidate(sid=path, kind="pi")])
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            cmux.print_panel_rows(snapshot["panels"], snapshot["probe_cache"])
+            cmux.print_diagnostics(snapshot)
+        self.assertIn("확인 불가", output.getvalue())
+        self.assertIn("세션 데이터 조회 불가", output.getvalue())
+        self.assertNotIn("guessed", output.getvalue())
+
+    def test_pi_resume_without_launch_args_and_shell_quoting(self):
+        cwd = str(self.root / "work dir's")
+        path = self.pi_file(name="custom dir's/session.jsonl", cwd=cwd)
+        panel = self.saved_panel(path, kind="pi", cwd=cwd)
+        command = cmux.resume_command(panel)
+        self.assertEqual(shlex.split(command), ["cd", cwd, "&&", "pi", "--session", path])
+        self.assertEqual(panel["launchArgs"], [])
+
+    def test_pi_non_path_resume_preserves_generic_fallback(self):
+        panel = self.saved_panel("id", kind="pi")
+        panel["launchArgs"] = ["pi", "--session", "id"]
+        self.assertEqual(cmux.resume_command(panel), "cd /work && pi --session id")
+        panel["launchArgs"] = ["pi"]
+        self.assertIn("재개 방법 미상", cmux.resume_command(panel))
+
+    def test_pi_legacy_save_matches_original_path(self):
+        path = self.pi_file()
+        panel = self.saved_panel(path, kind="pi")
+        panel.pop("resolution")
+        saved = self.save_fixture(panel)
+        result = self.compare(saved["panels"], self.resolve([self.candidate(sid=path, kind="pi")]))
+        self.assertEqual(len(result["matched"]), 1)
+        self.assertEqual(result["matched"][0][1]["sessionId"], path)
+
+    def test_pi_save_roundtrip_omits_private_fields_and_keeps_path(self):
+        path = self.pi_file()
+        snapshot = self.resolve([self.candidate(sid=path, kind="pi")])
+        saved_path = cmux.write_save_file(snapshot["panels"], snapshot["probe_cache"])
+        content = Path(saved_path).read_text()
+        self.assertIn("pi --session", content)
+        self.assertNotIn("_pi_display_id", content)
+        self.assertNotIn("_resume_unverified", content)
+        panel = cmux.read_save_file(saved_path)["panels"][0]
+        self.assertEqual(panel["sessionId"], path)
+        self.assertEqual(cmux.cached_probe({}, panel), "exists")
+        self.assertEqual(panel["_pi_display_id"], "custom-session")
+
+    def test_pi_valid_missing_can_auto_copy(self):
+        path = self.pi_file()
+        panel = self.saved_panel(path, kind="pi")
+        output = self.restore([panel], self.resolve([]))
+        self.copy_mock.assert_called_once_with(cmux.resume_command(panel))
+        self.assertNotIn("검증이 불완전", output)
+
+    def test_pi_unverified_missing_never_auto_copies(self):
+        path = self.pi_file()
+        for content in ("", "{", "not JSON", None):
+            with self.subTest(content=content):
+                self.copy_mock.reset_mock()
+                if content is None:
+                    Path(path).unlink()
+                else:
+                    Path(path).write_text(content)
+                output = self.restore([self.saved_panel(path, kind="pi")], self.resolve([]))
+                self.copy_mock.assert_not_called()
+                self.assertIn("pi 세션 파일 검증이 불완전", output)
+                self.assertNotIn("대화 이어짐 확인", output)
+
+    def test_pi_unverified_explicit_copy_warns_without_execution(self):
+        path = self.pi_file(version=99)
+        panel = self.saved_panel(path, kind="pi")
+        with mock.patch.object(cmux.subprocess, "run") as run:
+            output = self.restore([panel], self.resolve([]), "1")
+        self.copy_mock.assert_called_once_with(cmux.resume_command(panel))
+        self.assertIn("pi 세션 파일 검증이 불완전", output)
+        run.assert_not_called()
+
+    def test_pi_missing_panel_cwd_never_auto_copies(self):
+        path = self.pi_file()
+        panel = self.saved_panel(path, kind="pi", cwd=None)
+        output = self.restore([panel], self.resolve([]))
+        self.copy_mock.assert_not_called()
+        self.assertIn("pi 작업 경로 확인이 불완전", output)
+        self.assertNotIn("pi 세션 파일 검증이 불완전", output)
+
+    def test_pi_non_file_identifier_never_auto_copies(self):
+        panel = self.saved_panel("custom-session", kind="pi")
+        panel["launchArgs"] = ["pi", "--session", "custom-session"]
+        self.restore([panel], self.resolve([]))
+        self.copy_mock.assert_not_called()
+
+    def test_pi_valid_but_binding_unknown_never_auto_copies(self):
+        path = self.pi_file()
+        self.restore([self.saved_panel(path, "unknown", kind="pi")], self.resolve([]))
+        self.copy_mock.assert_not_called()
+
+    def test_pi_cwd_mismatch_never_auto_copies(self):
+        path = self.pi_file(cwd="/elsewhere")
+        self.restore([self.saved_panel(path, kind="pi")], self.resolve([]))
+        self.copy_mock.assert_not_called()
+
+    def test_pi_current_unknown_observation_blocks_definite_missing(self):
+        path = self.pi_file(version=99)
+        snapshot = self.resolve([self.candidate(sid=path, kind="pi")])
+        result = self.compare([self.saved_panel("/other/session.jsonl", kind="pi")], snapshot)
+        self.assertEqual(len(result["uncertain"]), 1)
+        self.assertEqual(len(result["missing"]), 0)
+
+    def test_pi_multiple_missing_keep_saved_numbers_without_auto_copy(self):
+        paths = [self.pi_file(name=f"session-{i}.jsonl") for i in range(3)]
+        saved = [self.saved_panel(path, kind="pi") for path in paths]
+        snapshot = self.resolve([self.candidate(sid=paths[0], kind="pi")])
+        output = self.restore(saved, snapshot)
+        self.assertIn("[2]", output)
+        self.assertIn("[3]", output)
+        self.copy_mock.assert_not_called()
+        self.restore(saved, snapshot, "3")
+        self.copy_mock.assert_called_once_with(cmux.resume_command(saved[2]))
+
+    def test_pi_same_header_id_does_not_equate_different_files(self):
+        saved_path = self.pi_file(name="saved.jsonl")
+        current_path = self.pi_file(name="current.jsonl")
+        snapshot = self.resolve([self.candidate(sid=current_path, kind="pi")])
+        result = self.compare([self.saved_panel(saved_path, kind="pi")], snapshot)
+        self.assertEqual(len(result["matched"]), 0)
+        self.assertEqual(len(result["missing"]), 1)
+        self.assertEqual(len(result["added"]), 1)
+
+    def test_pi_failed_header_query_is_cached_per_command(self):
+        path = self.pi_file()
+        cache = {}
+        with mock.patch("builtins.open", side_effect=PermissionError) as opened:
+            for _ in range(2):
+                panel = self.saved_panel(path, kind="pi")
+                self.assertEqual(cmux.cached_probe(cache, panel), "unknown")
+                self.assertTrue(panel["_resume_unverified"])
+            opened.assert_called_once()
+
+    def test_pi_native_nested_header_isolated_on_parser_limit(self):
+        path = self.pi_file()
+        header = ('{"type":"session","id":"nested","cwd":"/work","extra":'
+                  + "[" * 1100 + "0" + "]" * 1100 + "}")
+        Path(path).write_text(header)
+        try:
+            json.loads(header)
+            expected = "exists"
+        except RecursionError:
+            expected = "unknown"
+        self.assertEqual(cmux.probe_session_data("pi", path, "/work"), expected)
+
+    def test_pi_fresh_cache_revalidates_repaired_header(self):
+        path = self.pi_file(version=99)
+        panel = self.saved_panel(path, kind="pi")
+        self.assertEqual(cmux.cached_probe({}, panel), "unknown")
+        self.pi_file()
+        self.assertEqual(cmux.cached_probe({}, panel), "exists")
+        self.assertNotIn("_resume_unverified", panel)
+        self.assertEqual(panel["_pi_display_id"], "custom-session")
 
     def test_agent_priority_and_mismatch(self):
         candidate = self.candidate(sid="agent")
