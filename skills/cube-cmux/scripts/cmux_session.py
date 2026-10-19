@@ -598,6 +598,27 @@ def load_claude_transcript(session_id, cache):
     return result
 
 
+def continuation_cwd_matches(message_cwd, panel_cwd):
+    """정규화된 메시지 경로가 패널 범위인지 확인합니다. 루트·홈은 정확히 같아야 합니다."""
+    if (not text(message_cwd) or not text(panel_cwd)
+            or not os.path.isabs(message_cwd) or not os.path.isabs(panel_cwd)):
+        return False
+    if message_cwd == panel_cwd:
+        return True
+    if panel_cwd == os.sep:
+        return False
+    try:
+        home = os.path.expanduser("~")
+        if not text(home) or not os.path.isabs(home):
+            return False
+        home = normalized_path(home)
+    except (OSError, ValueError, RuntimeError):
+        return False
+    # 홈을 확인하지 못했을 때도 하위 경로로 허용 범위를 넓히지 않습니다.
+    return bool(home and panel_cwd != home
+                and message_cwd.startswith(panel_cwd.rstrip(os.sep) + os.sep))
+
+
 def resolve_continuation(panel, runtime, cache):
     """패널 연결의 확실성을 높이지 않고 명시적 이어짐을 검증해 재개 ID를 고릅니다."""
     panel = dict(panel, warnings=list(panel.get("warnings", [])))
@@ -633,11 +654,11 @@ def resolve_continuation(panel, runtime, cache):
             break
         if target in chain or len(chain) >= CLAUDE_CONTINUATION_LIMIT:
             return uncertain("대화 이어짐 순환/깊이 제한")
-        if not cwd or metadata["cwd"] != cwd:
+        if not continuation_cwd_matches(metadata["cwd"], cwd):
             return uncertain("원래 대화의 작업 경로 불일치/확인 불가")
         next_metadata = load_claude_transcript(target, cache)
         if (next_metadata["state"] != "exists" or not next_metadata["messages"]
-                or next_metadata["cwd"] != cwd):
+                or not continuation_cwd_matches(next_metadata["cwd"], cwd)):
             return uncertain("이어진 대화 조회/작업 경로 확인 불가")
         current = records.get(chain[-1])
         if current and any("parkedJobId 충돌" in w for w in current["warnings"]):

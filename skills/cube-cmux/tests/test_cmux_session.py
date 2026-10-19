@@ -1131,6 +1131,277 @@ class SessionTests(unittest.TestCase):
         self.transcript("new")
         return self.record("old", parkedJobId="job"), self.record("new", kind="bg", jobId="job")
 
+    def test_continuation_from_subdirectory(self):
+        for original, successor in (("/work/sub", "/work"), ("/work", "/work/sub"),
+                                    ("/work/sub/deploy", "/work/sub/deploy"),
+                                    ("/work/project-a", "/work/project-b")):
+            with self.subTest(original=original, successor=successor):
+                self.transcript("old", "new", cwd=original)
+                self.transcript("new", cwd=successor)
+                panel = self.resolve([self.candidate(sid="old")])["panels"][0]
+                self.assertEqual((panel["sessionId"], panel["resolution"]), ("new", "recorded"))
+                self.assertEqual(panel["originSessionId"], "old")
+                self.assertEqual(panel["continuation"], ["old", "new"])
+
+    def test_continuation_sibling_prefix_path_rejected(self):
+        for outside in ("/work2", "/work2/sub", "/", "/other"):
+            for original, successor in ((outside, "/work/sub"), ("/work/sub", outside)):
+                with self.subTest(original=original, successor=successor):
+                    self.transcript("old", "new", cwd=original)
+                    self.transcript("new", cwd=successor)
+                    panel = self.resolve([self.candidate(sid="old")])["panels"][0]
+                    self.assertEqual((panel["sessionId"], panel["resolution"]), ("old", "unknown"))
+                    self.assertTrue(panel["_continuation_blocked"])
+
+    def test_continuation_missing_message_cwd_blocks_automatic_copy(self):
+        for original, successor in ((None, "/work/sub"), ("/work/sub", None)):
+            with self.subTest(original=original, successor=successor):
+                self.transcript("old", "new", cwd=original)
+                self.transcript("new", cwd=successor)
+                panel = self.resolve([self.candidate(sid="old")])["panels"][0]
+                self.assertEqual(panel["sessionId"], "old")
+                if original is None:
+                    self.assertEqual(panel["resolution"], "recorded")
+                    self.assertTrue(panel["_resume_unverified"])
+                else:
+                    self.assertEqual(panel["resolution"], "unknown")
+                    self.assertTrue(panel["_continuation_blocked"])
+                self.restore([self.saved_panel()], self.resolve([]))
+                self.copy_mock.assert_not_called()
+
+    def test_continuation_broad_roots_require_exact_cwd(self):
+        home = str(self.root / "home")
+        with mock.patch.object(cmux.os.path, "expanduser", return_value=home):
+            for cwd in ("/", home):
+                for original, successor, allowed in ((cwd, cwd, True),
+                                                     (cwd + "/sub", cwd, False),
+                                                     (cwd, cwd + "/sub", False)):
+                    with self.subTest(cwd=cwd, original=original, successor=successor):
+                        self.transcript("old", "new", cwd=original)
+                        self.transcript("new", cwd=successor)
+                        panel = self.resolve([self.candidate(sid="old", cwd=cwd)])["panels"][0]
+                        self.assertEqual(panel["sessionId"], "new" if allowed else "old")
+                        self.assertEqual(panel["resolution"], "recorded" if allowed else "unknown")
+                        if not allowed:
+                            saved = self.saved_panel(cwd=cwd)
+                            snapshot = self.resolve([])
+                            result = self.compare([saved], snapshot)
+                            self.assertEqual([i for i, _ in result["uncertain"]], [1])
+                            self.assertEqual(result["missing"], [])
+                            self.restore([saved], snapshot)
+                            self.copy_mock.assert_not_called()
+                            output = self.restore([saved], snapshot, "1")
+                            self.assertIn("⚠️", output)
+                            self.assertIn("--resume old", self.copy_mock.call_args.args[0])
+                            self.copy_mock.reset_mock()
+
+    def test_continuation_project_below_home_still_allows_subdirectories(self):
+        home = str(self.root / "home")
+        with mock.patch.object(cmux.os.path, "expanduser", return_value=home):
+            for cwd in (home + "/project", str(self.root / "data")):
+                with self.subTest(cwd=cwd):
+                    self.transcript("old", "new", cwd=cwd + "/sub")
+                    self.transcript("new", cwd=cwd + "/other")
+                    panel = self.resolve([self.candidate(sid="old", cwd=cwd)])["panels"][0]
+                    self.assertEqual((panel["sessionId"], panel["resolution"]), ("new", "recorded"))
+
+    def test_continuation_cwd_helper_rejects_invalid_paths(self):
+        for invalid in (None, "", [], 123, "/work\x00", "relative"):
+            with self.subTest(invalid=invalid):
+                self.assertFalse(cmux.continuation_cwd_matches(invalid, "/work"))
+                self.assertFalse(cmux.continuation_cwd_matches("/work", invalid))
+
+    def test_continuation_home_lookup_failure_is_conservative(self):
+        for home in ("~", "relative", "", None):
+            with self.subTest(home=home), \
+                    mock.patch.object(cmux.os.path, "expanduser", return_value=home):
+                self.assertTrue(cmux.continuation_cwd_matches("/work", "/work"))
+                self.assertFalse(cmux.continuation_cwd_matches("/work/sub", "/work"))
+        for error in (OSError, ValueError, RuntimeError):
+            with self.subTest(error=error), \
+                    mock.patch.object(cmux.os.path, "expanduser", side_effect=error):
+                self.assertTrue(cmux.continuation_cwd_matches("/work", "/work"))
+                self.assertFalse(cmux.continuation_cwd_matches("/work/sub", "/work"))
+        with mock.patch.object(cmux.os.path, "expanduser", return_value="/home"), \
+                mock.patch.object(cmux, "normalized_path", return_value=None):
+            self.assertFalse(cmux.continuation_cwd_matches("/work/sub", "/work"))
+
+    def test_continuation_subdirectory_normalizes_dot_segments(self):
+        cwd = str(self.root / "workspace")
+        for message_cwd, allowed in ((cwd + "/sub/../deploy", True),
+                                     (cwd + "/../outside", False)):
+            for original, successor in ((message_cwd, cwd), (cwd, message_cwd)):
+                with self.subTest(original=original, successor=successor):
+                    self.transcript("old", "new", cwd=original)
+                    self.transcript("new", cwd=successor)
+                    panel = self.resolve([self.candidate(sid="old", cwd=cwd)])["panels"][0]
+                    self.assertEqual(panel["sessionId"], "new" if allowed else "old")
+
+    def test_continuation_subdirectory_normalizes_symlinks(self):
+        workspace = self.root / "workspace"
+        workspace.mkdir()
+        (workspace / "inside").mkdir()
+        (self.root / "outside").mkdir()
+        (workspace / "internal-link").symlink_to(workspace / "inside", target_is_directory=True)
+        (workspace / "external-link").symlink_to(self.root / "outside", target_is_directory=True)
+        for name, allowed in (("internal-link", True), ("external-link", False)):
+            for original, successor in ((str(workspace / name), str(workspace)),
+                                        (str(workspace), str(workspace / name))):
+                with self.subTest(original=original, successor=successor):
+                    self.transcript("old", "new", cwd=original)
+                    self.transcript("new", cwd=successor)
+                    panel = self.resolve([self.candidate(sid="old", cwd=str(workspace))])["panels"][0]
+                    self.assertEqual(panel["sessionId"], "new" if allowed else "old")
+
+    def test_continuation_broad_root_aliases_remain_restricted(self):
+        home = self.root / "home"
+        home.mkdir()
+        for name, target in (("home-link", home), ("root-link", Path("/"))):
+            alias = self.root / name
+            alias.symlink_to(target, target_is_directory=True)
+            with self.subTest(name=name), \
+                    mock.patch.object(cmux.os.path, "expanduser", return_value=str(home)):
+                self.transcript("old", "new", cwd=str(alias))
+                self.transcript("new", cwd=str(alias / "sub"))
+                panel = self.resolve([self.candidate(sid="old", cwd=str(alias))])["panels"][0]
+                self.assertEqual((panel["sessionId"], panel["resolution"]), ("old", "unknown"))
+
+    def test_continuation_multiple_subdirectory_hops_keep_panel_root(self):
+        self.transcript("old", "middle", cwd="/work/project-a")
+        self.transcript("middle", "new", cwd="/work/project-b")
+        self.transcript("new", cwd="/work/project-c")
+        panel = self.resolve([self.candidate(sid="old")])["panels"][0]
+        self.assertEqual(panel["continuation"], ["old", "middle", "new"])
+        self.transcript("new", cwd="/work2")
+        panel = self.resolve([self.candidate(sid="old")])["panels"][0]
+        self.assertEqual((panel["sessionId"], panel["resolution"]), ("old", "unknown"))
+
+    def test_continuation_subdirectory_runtime_checks_remain_exact(self):
+        for target_cwd in ("/work", "/work/sub"):
+            for linked in (False, True):
+                with self.subTest(target_cwd=target_cwd, linked=linked):
+                    self.transcript("old", "new", cwd="/work/sub")
+                    self.transcript("new", cwd="/work/sub")
+                    records = [self.record("new", cwd=target_cwd, kind="bg", jobId="job")]
+                    if linked:
+                        records.insert(0, self.record("old", parkedJobId="job"))
+                    panel = self.resolve([self.candidate(sid="old")], *records)["panels"][0]
+                    allowed = target_cwd == "/work"
+                    self.assertEqual(panel["sessionId"], "new" if allowed else "old")
+                    self.assertEqual(panel["resolution"], "recorded" if allowed else "unknown")
+                    for path in self.runtime.iterdir():
+                        path.unlink()
+
+    def test_continuation_subdirectory_runtime_conflict_still_blocks(self):
+        self.transcript("old", "new", cwd="/work/sub")
+        self.transcript("new", cwd="/work/sub")
+        panel = self.resolve([self.candidate(sid="old")], self.record("old", parkedJobId="job"),
+                             self.record("different", kind="bg", jobId="job"))["panels"][0]
+        self.assertEqual((panel["sessionId"], panel["resolution"]), ("old", "unknown"))
+
+    def test_continuation_subdirectory_does_not_promote_confidence(self):
+        self.transcript("old", "new", cwd="/work/sub")
+        self.transcript("new", cwd="/work/sub")
+        for candidate, records, expected in ((self.candidate(), [self.record("old")], "inferred"),
+                                             (self.candidate(checkpoint="old"), [], "unknown")):
+            with self.subTest(expected=expected):
+                panel = self.resolve([candidate], *records)["panels"][0]
+                self.assertEqual((panel["sessionId"], panel["resolution"]), ("new", expected))
+                for path in self.runtime.iterdir():
+                    path.unlink()
+                self.restore([panel], self.resolve([]))
+                self.copy_mock.assert_not_called()
+
+    def test_continuation_subdirectory_without_explicit_link_keeps_id(self):
+        self.transcript("old", cwd="/work/sub")
+        self.transcript("new", cwd="/work/sub")
+        panel = self.resolve([self.candidate(sid="old")], self.record("old", parkedJobId="job"),
+                             self.record("new", kind="bg", jobId="job"))["panels"][0]
+        self.assertEqual(panel["sessionId"], "old")
+        self.assertNotIn("continuation", panel)
+
+    def test_continuation_subdirectory_unsafe_transcripts_still_block(self):
+        for unsafe in ("resumed", "conflicting", "partial", "corrupt", "missing", "cycle", "depth"):
+            with self.subTest(unsafe=unsafe):
+                old = self.transcript("old", "new", cwd="/work/sub")
+                new = self.transcript("new", cwd="/work/sub")
+                if unsafe == "resumed":
+                    with old.open("a") as f:
+                        f.write(json.dumps(dict(type="user", sessionId="old", cwd="/work/sub",
+                                                timestamp="2026-09-28T03:00:00Z")) + "\n")
+                elif unsafe == "conflicting":
+                    with old.open("a") as f:
+                        f.write(json.dumps(dict(type="continued-in", sessionId="old",
+                                                continuedInSessionId="other",
+                                                timestamp="2026-09-28T02:00:00Z")) + "\n")
+                elif unsafe in ("partial", "corrupt"):
+                    with new.open("a") as f:
+                        f.write("{" if unsafe == "partial" else "{\n")
+                elif unsafe == "missing":
+                    new.unlink()
+                elif unsafe == "cycle":
+                    self.transcript("new", "old", cwd="/work/sub")
+                limit = 1 if unsafe == "depth" else cmux.CLAUDE_CONTINUATION_LIMIT
+                with mock.patch.object(cmux, "CLAUDE_CONTINUATION_LIMIT", limit):
+                    panel = self.resolve([self.candidate(sid="old")])["panels"][0]
+                self.assertEqual((panel["sessionId"], panel["resolution"]), ("old", "unknown"))
+                self.assertTrue(panel["_continuation_blocked"])
+
+    def test_continuation_subdirectory_saved_roundtrip_and_legacy_match(self):
+        self.transcript("old", "new", cwd="/work/sub")
+        self.transcript("new", cwd="/work/sub")
+        panel = self.resolve([self.candidate(sid="old")])["panels"][0]
+        path = cmux.write_save_file([panel])
+        read = cmux.read_save_file(path)["panels"][0]
+        self.assertEqual(read["sessionId"], "new")
+        self.assertEqual(read["originSessionId"], "old")
+        self.assertEqual(read["continuation"], ["old", "new"])
+        content = Path(path).read_text()
+        self.assertEqual(content.count("claude --resume"), 1)
+        self.assertIn("claude --resume new", content)
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            cmux.print_panel_rows([panel])
+        self.assertIn("new", output.getvalue())
+        self.assertNotIn("old", output.getvalue())
+        legacy = self.saved_panel()
+        legacy.pop("resolution")
+        saved = self.save_fixture(legacy)["panels"]
+        result = self.compare(saved, self.resolve([self.candidate(sid="new")]))
+        self.assertEqual([i for i, _ in result["matched"]], [1])
+        self.assertEqual(result["matched"][0][1]["sessionId"], "new")
+        self.assertEqual(result["missing"], [])
+        self.assertEqual(result["uncertain"], [])
+        self.assertEqual(result["added"], [])
+        self.assertEqual(saved[0]["sessionId"], "old")
+
+    def test_continuation_subdirectory_offline_resume_and_stable_number(self):
+        self.transcript("old", "new", cwd="/work/sub")
+        self.transcript("new", cwd="/work/sub")
+        self.restore([self.saved_panel()], self.resolve([]))
+        self.assertIn("--resume new", self.copy_mock.call_args.args[0])
+        self.assertNotIn("--resume old", self.copy_mock.call_args.args[0])
+        self.copy_mock.reset_mock()
+        snapshot = self.resolve([self.candidate(sid="matched", cwd="/other")])
+        saved = [self.saved_panel("matched", cwd="/other"), self.saved_panel()]
+        output = self.restore(saved, snapshot, "2")
+        self.assertIn("[2]", output)
+        self.assertIn("--resume new", self.copy_mock.call_args.args[0])
+
+    def test_continuation_subdirectory_live_bg_requires_numbered_attach(self):
+        self.transcript("old", "new", cwd="/work/sub")
+        self.transcript("new", cwd="/work/sub")
+        snapshot = self.resolve([], self.record("old", parkedJobId="job"),
+                                self.record("new", kind="bg", jobId="job"))
+        result = self.compare([self.saved_panel()], snapshot)
+        self.assertEqual([i for i, _ in result["uncertain"]], [1])
+        self.assertEqual(result["missing"], [])
+        self.restore([self.saved_panel()], snapshot)
+        self.copy_mock.assert_not_called()
+        self.restore([self.saved_panel()], snapshot, "1")
+        self.assertIn("claude attach job", self.copy_mock.call_args.args[0])
+        panel = self.resolve([self.candidate(sid="old")])["panels"][0]
+        self.assertIn("claude --resume new", cmux.resume_command(panel))
+
     def test_continuation_recorded_single_target(self):
         records = self.continuation_fixture()
         panel = self.resolve([self.candidate(sid="old")], *records)["panels"][0]
