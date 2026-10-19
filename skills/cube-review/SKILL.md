@@ -13,7 +13,7 @@ trigger:
 argument-hint: "[파일 경로 | <hash> | <hash>..<hash>] [--heavy] [--clear]"
 disable-model-invocation: false # 슬래시 명령 및 AI 의도 감지 모두 허용
 allowed-tools: Read, Grep, Bash, Task
-compatibility: opencode, claude, gemini
+compatibility: opencode, claude, gemini, pi
 ---
 
 # Code Reviewer
@@ -97,6 +97,7 @@ compatibility: opencode, claude, gemini
 | Claude Code | `Task`       | `subagent_type: general-purpose`, `background: true` |
 | OpenCode    | `task`       | `subagent_type: <호스트에 등록된 generalist 계열>`   |
 | Gemini CLI  | `generalist` | `generalist(request: string)`                        |
+| Pi          | `subagent`   | 호스트가 제공하는 호출 형식 사용                      |
 
 > 호스트가 sub-agent 도구를 제공하지 않는 경우에 한해 메인 에이전트가 두 reviewer 체크리스트를 순차 수행하십시오. 단, sub-agent 도구가 등록되어 있으면 **반드시 호출을 시도**하고, **실제 에러가 발생한 경우에만 fallback을 발동**합니다. 사전 추측이나 사용자 컨텍스트 기반 자가 판단으로 fallback을 발동하지 마십시오.
 >
@@ -251,4 +252,4 @@ No issues found. Checked bugs, architecture, naming, and project AI convention f
 
 ---
 
-**Updated At:** 2026. 4. 29.
+**Updated At:** 2026. 10. 19.
