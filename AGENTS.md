@@ -1,6 +1,6 @@
 # Cube 🧊 - Project Context
 
-This directory contains **Cube**, a unified configuration and instruction system designed to synchronize and manage AI agent behavior (Gemini CLI, Claude Code, OpenCode) across different environments.
+This directory contains **Cube**, a unified configuration and instruction system designed to synchronize and manage AI agent behavior (Gemini CLI, Claude Code, OpenCode, Pi) across different environments.
 
 ## 🎯 Project Overview
 
@@ -26,7 +26,7 @@ To maintain documentation quality and consistency, this project uses **`markdown
 ## 📂 Directory Overview
 
 - **Main Technologies:** Bash/Zsh scripting, Markdown-based AI Instructions (Skills).
-- **Architecture:** Modular "Skills" (`skills/`) symlinked to specific agent directories, automated via an idempotent installation script (`scripts/install.sh`).
+- **Architecture:** Modular "Skills" (`skills/`) symlinked to `~/.claude/skills/` for Claude Code and shared `~/.agents/skills/` for Gemini CLI, OpenCode, and Pi, automated via an idempotent installation script (`scripts/install.sh`). Pi discovers the shared path directly; do not create `~/.pi/.agents/skills/` or duplicate skills.
 
 - **`skills/`**: The core of the system. Contains modular AI instructions.
   - Each skill (e.g., `cube-summary`, `cube-commit`) is a standalone directory with a `SKILL.md` file.
@@ -47,7 +47,7 @@ To maintain documentation quality and consistency, this project uses **`markdown
 > **CRITICAL:** Always run the diagnostic check **before** performing a new installation or update.
 
 1. **Diagnose Environment (Mandatory):** `bash ./scripts/install.sh --check`
-2. **Install/Update:** `bash ./scripts/install.sh [agents...]` (e.g., `bash ./scripts/install.sh claude gemini`)
+2. **Install/Update:** `bash ./scripts/install.sh [agents...]` (e.g., `bash ./scripts/install.sh claude gemini` or `bash ./scripts/install.sh pi`). Without agent arguments, defaults to Claude, Gemini, OpenCode, and Pi. Pi-only installation registers the shared shell aliases and skills without installing other agents' specific resources. Legacy Gemini/OpenCode skill links are cleaned up only when the respective agent is selected. The `--check` command always diagnoses the full environment, including unselected agents.
 3. **Apply Aliases:** `source ~/.bashrc` or `source ~/.zshrc` (after installation).
 
 ### Creating a New Skill

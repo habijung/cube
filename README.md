@@ -17,7 +17,7 @@ If you are an AI agent, your first action is to **read `AGENTS.md`** and perform
 
 - **Architecture First:** 모든 개발 작업 전 아키텍처 설계를 선행하여 견고한 소프트웨어 구조를 지향합니다.
 - **Cross-Shell Compatibility:** Bash와 Zsh를 모두 지원하며, `install.sh`를 통해 자동화된 환경 구축이 가능합니다.
-- **Multi-Agent Support:** Gemini CLI, Claude Code, OpenCode(with Ollama) 등 다양한 에이전트를 위한 통합 스킬셋을 제공합니다.
+- **Multi-Agent Support:** Gemini CLI, Claude Code, OpenCode(with Ollama), Pi를 위한 통합 스킬셋을 제공합니다.
 - **Topic-based Indexing:** 모든 지침에 명확한 토픽 레이블을 부여하여 AI의 컨텍스트 이해도를 극대화했습니다.
 - **Web UI Optimization:** 좁은 화면에서도 가독성을 잃지 않도록 설계된 '요약표 + 상세 리스트' 하이브리드 레이아웃을 채택했습니다.
 
@@ -60,18 +60,35 @@ If you are an AI agent, your first action is to **read `AGENTS.md`** and perform
 이 저장소를 클론한 후, 다음 명령어를 실행하여 환경을 구축하세요:
 
 ```bash
-# 기본 설치 (모든 에이전트 지원)
+# 기본 설치 (Claude, Gemini, OpenCode, Pi)
 bash ./scripts/install.sh
 
 # 특정 에이전트만 선택 설치
 bash ./scripts/install.sh claude gemini
+
+# Pi만 선택 설치
+bash ./scripts/install.sh pi
+
+# 전체 환경 진단
+bash ./scripts/install.sh --check
 ```
+
+Skill은 다음 경로에 저장소 디렉터리의 심볼릭 링크로 설치합니다:
+
+- **Claude Code:** `~/.claude/skills/`
+- **Gemini CLI · OpenCode · Pi:** 공용 `~/.agents/skills/`
+
+Pi는 공용 경로를 자동 인식하므로 `~/.pi/.agents/skills/`나 Pi용 복사본을 만들 필요가 없습니다. 이미 공용 skill이 설치되어 있으면 같은 링크를 재사용합니다. 각 skill의 에이전트별 실행 조건은 해당 `SKILL.md`를 확인하세요.
+
+Pi 단독 설치는 공용 shell alias 등록과 skill 링크 설치를 수행하며, Claude 설정·Gemini 정책·OpenCode 플러그인은 설치하지 않습니다. 구형 Gemini·OpenCode skill 링크 정리도 해당 에이전트를 선택했을 때만 수행합니다.
+
+`--check`는 Pi 단독 설치 여부와 관계없이 전체 에이전트 환경을 진단합니다. 선택하지 않은 에이전트의 미설정 항목도 보고할 수 있습니다.
 
 ### 🤖 2. For AI Agents (Setup Instruction)
 
 AI 에이전트는 사용자가 "Cube 환경을 세팅해줘"라고 요청하면 다음 단계를 따르세요:
 
-1. **Agent Selection:** 어떤 에이전트(Claude, Gemini, OpenCode)를 설정할지 사용자에게 확인합니다.
+1. **Agent Selection:** 어떤 에이전트(Claude, Gemini, OpenCode, Pi)를 설정할지 사용자에게 확인합니다.
 2. **Execution:** 선택된 에이전트를 인자로 하여 `bash ./scripts/install.sh <agents>`를 실행합니다.
 3. **Verification:** 실행 결과를 보고하고, 심볼릭 링크가 정상적으로 생성되었는지 확인합니다.
 
@@ -81,3 +98,4 @@ AI 에이전트는 사용자가 "Cube 환경을 세팅해줘"라고 요청하면
 
 - [Gemini CLI Documentation](https://geminicli.com/docs/)
 - [Claude Code Documentation](https://code.claude.com/docs/)
+- [Pi Skills Documentation](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/skills.md)

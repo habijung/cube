@@ -39,12 +39,12 @@ check_installation() {
   fi
 
   # 2. Agent Skills Check
-  local agents_to_check=("claude" "gemini" "opencode")
+  local agents_to_check=("claude" "gemini" "opencode" "pi")
   local missing_agents=()
   for agent in "${agents_to_check[@]}"; do
     case "$agent" in
       claude) DEST_BASE="$HOME/.claude" ;;
-      gemini|opencode) DEST_BASE="$HOME/.agents" ;;
+      gemini|opencode|pi) DEST_BASE="$HOME/.agents" ;;
     esac
 
     local skills_dest="$DEST_BASE/skills"
@@ -196,8 +196,8 @@ fi
 echo "📦 Cube detected at: $CUBE_PATH"
 
 if [[ ${#AGENTS[@]} -eq 0 ]]; then
-  echo "ℹ️  No agents specified. Defaulting to: claude, gemini, opencode"
-  AGENTS=("claude" "gemini" "opencode")
+  echo "ℹ️  No agents specified. Defaulting to: claude, gemini, opencode, pi"
+  AGENTS=("claude" "gemini" "opencode" "pi")
 fi
 
 # 1. Alias 등록 (cube.sh)
@@ -382,9 +382,14 @@ fi
 # 3. Agent skills symlinks
 echo "🔧 Setting up Agent Skills..."
 
-# Cleanup old, conflicting paths if they exist
-echo "🧹 Cleaning up old skill paths..."
-for old_path in "$HOME/.gemini/skills" "$HOME/.config/opencode/skills"; do
+# Cleanup old, conflicting paths only for selected agents
+echo "🧹 Cleaning up old skill paths for selected agents..."
+for agent in "${AGENTS[@]}"; do
+  case "$agent" in
+    gemini) old_path="$HOME/.gemini/skills" ;;
+    opencode) old_path="$HOME/.config/opencode/skills" ;;
+    *) continue ;;
+  esac
   if [[ -d "$old_path" ]]; then
     for skill_dir in "$SKILLS_SRC"/cube-*/; do
       skill_dir=${skill_dir%/}
@@ -403,7 +408,7 @@ done
 for agent in "${AGENTS[@]}"; do
   case "$agent" in
     claude) DEST_BASE="$HOME/.claude" ;;
-    gemini|opencode) DEST_BASE="$HOME/.agents" ;;
+    gemini|opencode|pi) DEST_BASE="$HOME/.agents" ;;
     *) echo "⚠️  Unknown agent: $agent. Skipping..."; continue ;;
   esac
 
