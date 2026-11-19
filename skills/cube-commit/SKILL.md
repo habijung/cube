@@ -16,22 +16,25 @@ compatibility: opencode, claude, gemini
 
 ## Instructions
 
-1. **Status Investigation:** 쉘 명령어 `git status` 및 `git diff HEAD` (또는 `git diff --staged`)를 실행하여 현재 추적 중인 파일 상태와 구체적인 변경 내역을 확인하세요. 이전에 어떤 커밋들이 있었는지 보려면 `git log -n 3` 등을 활용하여 스타일을 참고하되, `## Commit Message Rules`에 정의된 규칙이 항상 우선합니다. **반드시 스킬 호출 시점에 명령어를 새로 실행하세요. 대화 컨텍스트에 남아 있는 이전 git 출력을 재사용해서는 안 됩니다.**
+1. **Status Investigation:** 대상 저장소 루트에서 `git symbolic-ref -q HEAD`가 로컬 브랜치를 가리키지 않으면 중단하세요. 실제 인덱스를 읽기 전에 `git rev-parse --absolute-git-dir`과 `git rev-parse --git-common-dir`로 Git 디렉터리를 확인하고, 어느 쪽에든 `sharedindex.*`가 있으면 공유 인덱스의 시각을 갱신하지 않도록 이 절차를 중단하세요(이전 파일이 남은 경우도 포함). 그 외에는 `git --no-optional-locks status` 및 `git --no-optional-locks diff --no-ext-diff --no-textconv HEAD` (이미 스테이징했거나 첫 커밋이면 `HEAD` 대신 `--staged`)를 실행하여 현재 추적 중인 파일 상태와 구체적인 변경 내역을 확인하세요. 이전에 어떤 커밋들이 있었는지 보려면 `git log -n 3` 등을 활용하여 스타일을 참고하되, `## Commit Message Rules`에 정의된 규칙이 항상 우선합니다. **반드시 스킬 호출 시점에 명령어를 새로 실행하세요. 대화 컨텍스트에 남아 있는 이전 git 출력을 재사용해서는 안 됩니다.**
 2. **Author Resolution (Silent):** 다음 순서로 author 정보를 수집하되, 오류가 없는 한 사용자에게 보고하지 마세요.
    - `git config --local user.name` / `git config --local user.email` 실행 → local 설정 존재 여부를 내부적으로 기록 (출처 태그 결정용)
    - `git config user.name` / `git config user.email` 실행 → 실제 사용될 author 확정 (local → global 자동 fallback)
    - **local, global 모두 없음:** 커밋을 진행하지 말고 사용자에게 경고하세요.
    - `git remote get-url origin 2>/dev/null` 실행 → remote URL을 내부적으로 기록 (제안 단계의 경고 메시지 출력 여부 판단용)
-3. **Context Analysis (Silent):** Step 1에서 수집한 `git diff HEAD` 결과를 재분석하여 현재 진행 중인 작업의 전체 맥락(큰 그림)을 파악하세요. 별도 명령어를 재실행하지 마세요. 결과를 사용자에게 별도로 보고하지 마세요.
+3. **Context Analysis (Silent):** Step 1에서 수집한 상태와 diff를 재분석하여 현재 진행 중인 작업의 전체 맥락(큰 그림)을 파악하세요. 별도 명령어를 재실행하지 마세요. 결과를 사용자에게 별도로 보고하지 마세요.
 4. **Message Drafting:** 파악한 전체 맥락을 바탕으로 커밋 메시지 초안을 작성하되, 타겟은 다음 규칙을 따릅니다.
    - **Staged 파일이 있는 경우:** 전체 작업 중 *현재 스테이징된 파일들*이 담당하는 역할에 맞춰 메시지를 작성합니다.
    - **Staged 파일이 없는 경우:** 전체 변경 사항을 한 번에 커밋하려 한다고 간주합니다. 모든 modified + untracked 파일을 확인한 뒤, 각 파일을 현재 커밋 주제와의 관련성으로 분류하세요.
      - **관련 있음:** 커밋 주제와 직접 연관된 파일 → 스테이징 대상으로 선정
      - **관련 없음:** 다른 작업(별도 Agent 또는 작업 흐름)에 속하는 파일 → 스테이징 제외
-     - Step 5 제안 시 분류 결과를 명시하고, `git add <file1> <file2> ...` 형태로 파일을 명시적으로 지정하여 승인을 받으세요.
+     - Step 5에서 분류 결과와 실제로 스테이징할 파일 경로를 명시하세요. 이미 staged 변경이 있으면 추가 스테이징을 제안하지 마세요.
    - 커밋 메시지는 '무엇을(what)' 했는지보다는 '왜(why)' 했는지에 초점을 맞춥니다. (Conventional Commits 스타일)
    - **Context Independence:** 메시지는 현재 세션/대화 맥락 없이도 독립적으로 이해되어야 합니다. `Phase`, `이전/다음 작업`, `앞서 논의한 대로` 같은 세션 의존적 표현을 사용하지 마세요. (자세한 금지 표현은 `Commit Message Rules` 7번 참고)
-5. **Proposal & Approval Request:** 파악된 작업 맥락, 파일 상태 요약, 그리고 커밋 메시지 초안을 아래 형식으로 한 번에 제시하여 승인을 요청하세요. 이 제안은 **직전 제안본 1건**에만 연결되는 승인 게이트입니다. 사용자가 명시적으로 승인(예: "진행해줘", "OK")하기 전까지는 절대 커밋을 실행하지 마세요. **제시 직전, 작성된 메시지에 `Commit Message Rules` 7번이 금지하는 컨텍스트 의존적 표현이 포함되지 않았는지 self-check 후 필요 시 재작성하세요.**
+5. **Proposal & Approval Request:** 작업 맥락, 파일 상태, 커밋 메시지와 지문을 한 번에 제시하세요. **승인 대상은 제안한 커밋**이며, 지정 파일의 스테이징이 필요한 경우 그 작업도 제안에 포함합니다. 제시 직전에 `Commit Message Rules` 7번을 확인하세요.
+   - 이 절차는 일반 커밋 제안에 사용하세요. 병합·리베이스·체리픽·리버트 등 진행 중인 Git 작업이 있으면 이 절차를 시작하지 말고 해당 작업 상태를 보고하세요. 저장소·브랜치·기준 `HEAD`(첫 커밋이면 없음)·초기 인덱스 트리·예정 트리·대상 경로·전체 메시지 해시를 제안에 연결해 기록하세요. 메시지는 마지막 줄바꿈을 포함한 파일로 보관하세요.
+   - 제안 전에는 실제 인덱스를 변경하지 마세요. 실제 인덱스의 복사본을 `GIT_INDEX_FILE`로 지정한 임시 환경에서 현재 트리를 계산합니다. 임시 Git 명령에는 `-c core.splitIndex=false`를 지정하세요. 추가 스테이징이 필요하면 같은 임시 인덱스에 `git --literal-pathspecs add -A -- <선정 경로들>`을 실행하여 예정 트리를 계산하세요. 실제 객체 저장소는 대체 객체 저장소로만 참조하고 새 객체는 임시 객체 디렉터리에만 쓰세요. 첫 커밋처럼 실제 인덱스가 없다면 임시 환경에서 `git read-tree --empty`로 초기화하세요.
+   - 기준 `HEAD`의 트리(첫 커밋이면 빈 트리)와 예정 트리 사이의 전체 diff를 `--no-ext-diff --no-textconv --binary --full-index --ignore-submodules=none --submodule=short`로 확인해 제안 설명과 대상 경로가 일치하는지 검증하고, 사용자에게 그 diff 또는 열 수 있는 동일한 패치를 보여 주세요. 이미 스테이징된 제안이면 대상 경로의 미스테이징 변경 내용과 파일 유형(스테이징된 삭제 후 재생성된 파일 포함)까지 기록하세요. 상태 코드만으로 대체하지 마세요. 제안과 실제 변경을 정확히 연결할 수 없으면 제안하지 말고 이유를 보고하세요. 승인 대기 중 필요한 메시지·패치 등은 비공개 임시 디렉터리에만 두고, 제안 무효화나 절차 종료 시 정리하세요.
 
    ```text
    ### 💡 작업 맥락 요약
@@ -39,23 +42,28 @@ compatibility: opencode, claude, gemini
 
    ### 📦 커밋 대상 파일 상태
    - 🟢 Staged    : <파일 목록> (이미 스테이징됨, 커밋 대상)
-   - 🔵 선정됨     : <파일 목록> (커밋 주제와 관련 있음 → `git add`로 스테이징 예정)
+   - 🔵 선정됨     : <파일 목록> (승인 후 `git add`로 지정 경로만 스테이징)
    - 🟡 Unstaged  : <파일 목록> (수정됨, 커밋 주제 무관 → 제외)
    - ⬜ Untracked : <파일 목록> (신규, 커밋 주제 무관 → 제외)
-     *(Staged가 없고 선정된 파일이 있는 경우: `git add <선정 파일 목록>`으로 스테이징 후 커밋합니다)*
+     *(Staged가 없고 선정된 파일이 있는 경우: 승인 후 지정 경로만 스테이징하고 제안과 일치하면 추가 승인 없이 커밋합니다.)*
 
    ---
    Author : <name> <<email>>  (local)   ← local config 사용 시
    Author : <name> <<email>>  (global)  ← global config fallback 시
+   Repository : <작업 트리 루트>
    Branch : <current-branch>
    Fingerprint:
-     Staged files : <파일 목록 또는 없음>
+     Base HEAD    : <기준 커밋 ID 또는 없음>
+     Commit files : <커밋 대상 경로 목록>
+     Commit tree  : <예정 트리 ID>
      Diff summary : <N files, +A -B>
-     Message hash : <메시지 초안 식별용 한 줄 요약>
+     Message hash : <전체 메시지 해시>
    Message:
      <commit subject>
 
      <commit body (있는 경우)>
+   Patch:
+     <예정 트리의 최종 diff 또는 사용자가 열 수 있는 동일 패치>
    ```
 
    - **`(global)` 태그이고 remote URL이 존재하는 경우:** Author 줄 바로 아래에 경고를 추가하세요.
@@ -64,20 +72,18 @@ compatibility: opencode, claude, gemini
      ⚠️  Remote: <remote-url> — Local git config 미설정
      ```
 
-6. **Approval Validation:** 사용자의 승인 문구는 **직전 AI 메시지가 Step 5의 제안문일 때만** 유효합니다. `진행`, `진행해줘`, `OK`, `proceed commit`, `커밋해` 같은 짧은 승인 표현도 동일하게 취급하되, 아래 조건을 모두 만족할 때만 유효합니다.
-   - 승인 직전까지 staged 파일 목록이 동일함
-   - 승인 직전까지 staged diff가 동일함
-   - 승인 직전까지 커밋 메시지 초안이 동일함
-   - 승인 직전 AI 메시지가 최신 제안문이며, 그 이후 재제안이나 수정이 없었음
-   - 위 조건 중 하나라도 충족하지 않으면 승인으로 간주하지 말고 Step 1로 돌아가 최신 상태를 다시 확인한 뒤 새 제안문을 보여주세요.
-7. **Commit Execution:** Step 6을 통과한 뒤에만 `git commit`을 실행하세요. `git push`는 사용자가 별도로 요청하지 않는 한 절대 실행하지 마세요.
+6. **Approval Validation:** 사용자의 명시적 승인은 **직전 AI 메시지가 Step 5의 최신 제안문일 때만** 유효합니다. `진행`, `진행해줘`, `OK`, `proceed commit`, `커밋해` 같은 짧은 승인 표현도 같은 조건을 적용합니다.
+   - 인덱스를 읽기 전에 Step 1의 공유 인덱스 확인을 반복하세요. 스테이징 전에 Step 5와 같은 방법으로 저장소·브랜치·기준 `HEAD`·초기 인덱스 트리·예정 트리·경로·메시지를 확인하세요. 이미 스테이징된 제안은 Step 5에서 기록한 미스테이징 내용과 파일 유형도 확인하세요. 직전 승인 제안과 다르거나 같은 저장소에서 다른 Git 작업이 겹친 사실을 확인하면, 인덱스를 수정하지 말고 중단하세요.
+7. **Commit Execution:** 추가 스테이징이 제안에 포함된 경우에만 실제 인덱스에 `git --literal-pathspecs add -A -- <승인된 경로들>`을 실행하세요. 기존 스테이징을 자동 변경하거나 제외한 파일을 추가하지 마세요.
+   - 즉시 진행 중인 다른 Git 작업이 없는지 확인하고, 저장소·브랜치·기준 `HEAD`와 실제 스테이징된 경로·트리·전체 메시지를 승인본과 대조하세요. 일치하면 일반 `git commit --cleanup=verbatim -F <승인된 메시지 파일>`을 실행합니다. 기존 Git 훅을 우회하거나 `-a`·경로 인자로 커밋 대상을 바꾸지 마세요. **제안한 스테이징이 검증을 통과하면 추가 승인 없이 커밋합니다.**
+   - 실행 후 종료 상태, 현재 브랜치가 승인한 브랜치인지, 그리고 그 브랜치에 실제로 반영된 커밋을 확인하세요. 전체 부모 목록은 승인한 기준 `HEAD` 한 개(첫 커밋이면 없음)와 일치해야 하고, 트리·전체 메시지도 확인하세요. Git 훅이나 동시 변경으로 결과가 달라졌거나 상태가 불명확하면 실제 상태를 보고하고 자동 재시도·원복은 하지 마세요.
 
 ## Guidelines
 
 - **No Implicit Commit:** 사용자가 명시적으로 승인하기 전까지 `git commit`을 실행해서는 안 됩니다. 커밋 메시지 수정 요청이 있을 경우 Step 4로 돌아가 재작성 후 다시 승인을 받으세요.
-- **Approval Invalidation:** 승인 이후 아래 항목 중 하나라도 바뀌면 이전 승인은 즉시 무효입니다: staged 파일 추가/제거, staged diff 변경, `git add`, `git reset`, `git reset --soft`, `git restore --staged`, 새 파일 수정, 커밋 메시지 초안 변경.
-- **Re-Propose After Invalidation:** 승인이 무효화된 뒤 사용자가 `진행`, `proceed commit` 같은 짧은 명령을 주더라도 바로 커밋하지 말고, 무효 사유를 한 줄로 설명한 뒤 최신 상태 기준으로 새 제안문을 다시 제시하세요.
-- **Proposal State Machine:** 커밋 절차는 `proposal_prepared -> approval_pending -> approved_for_exact_proposal -> commit_executed` 순서로만 진행합니다. 상태 변경 없이 다음 단계로 건너뛰지 마세요. 상태가 바뀌면 `invalidated_by_diff_change`로 되돌린 뒤 재제안이 필요합니다.
+- **Approval Invalidation:** 승인된 커밋 대상·내용·메시지 또는 저장소·브랜치·기준 `HEAD`가 달라졌거나, 승인된 절차를 시작하기 전에 인덱스 트리가 달라졌으면 이전 승인은 무효입니다. 사유를 설명하고 최신 상태로 다시 제안하세요.
+- **Stop on Failure:** 스테이징에 실패했거나 제안과의 일치를 확인할 수 없으면 커밋하지 마세요. 원인과 현재 인덱스 상태를 보고하세요. 예상과 다른 스테이징을 자동 수정하거나 되돌리지 마세요.
+- **Proposal State Machine:** `proposal_prepared -> approval_pending -> approved_for_exact_proposal -> verified_index -> commit_executed` 순서를 따릅니다. 승인 후 제안된 스테이징을 실행하는 것은 별도의 승인 단계가 아닙니다.
 - **No Push Policy:** 어떠한 경우에도 `git push`를 실행하지 마세요.
 
 ## Commit Message Rules
