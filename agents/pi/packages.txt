@@ -1,0 +1,3 @@
+# Cube-managed Pi packages (unversioned npm sources only)
+npm:pi-web-access
+npm:pi-subagents

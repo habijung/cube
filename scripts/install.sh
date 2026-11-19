@@ -25,6 +25,15 @@ else
   RC_FILE="$HOME/.bashrc"
 fi
 
+# Pi package operations are kept separate from shell setup and never load extensions.
+manage_pi_packages() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "❌ [Pi] python3 is required for package installation and diagnosis."
+    return 1
+  fi
+  python3 "$CUBE_PATH/scripts/pi_packages.py" "$CUBE_PATH/agents/pi/packages.txt" "$@"
+}
+
 # 진단 기능 (Check Mode)
 check_installation() {
   echo "🔍 Diagnosing Cube Environment..."
@@ -102,6 +111,12 @@ check_installation() {
     fi
   done
 
+  # Pi packages: read-only local checks, independent of shared skill links.
+  if ! manage_pi_packages --check; then
+    errors=$((errors + 1))
+    [[ ! " ${missing_agents[@]} " =~ " pi " ]] && missing_agents+=("pi")
+  fi
+
   # 3. Claude specific status line check
   local statusline_src="$CUBE_PATH/agents/claude/cube-status-line.sh"
   local statusline_dest="$HOME/.claude/cube-status-line.sh"
@@ -167,7 +182,7 @@ except Exception: sys.exit(1)
 
   echo ""
   if [[ $errors -eq 0 && ${#missing_agents[@]} -eq 0 ]]; then
-    echo "✨ All systems nominal! Cube is correctly configured."
+    echo "✨ All systems nominal! Cube-managed local checks passed (not a runtime or latest-version check)."
   else
     [[ $errors -gt 0 ]] && echo "⚠️  Found $errors issue(s)."
     if [[ ${#missing_agents[@]} -gt 0 ]]; then
@@ -198,6 +213,14 @@ echo "📦 Cube detected at: $CUBE_PATH"
 if [[ ${#AGENTS[@]} -eq 0 ]]; then
   echo "ℹ️  No agents specified. Defaulting to: claude, gemini, opencode, pi"
   AGENTS=("claude" "gemini" "opencode" "pi")
+fi
+
+# Check Pi prerequisites before changing shell configuration or skill links.
+if [[ " ${AGENTS[@]} " =~ " pi " ]]; then
+  if ! manage_pi_packages --preflight; then
+    echo "❌ Setup stopped: Pi package prerequisites are not satisfied."
+    exit 1
+  fi
 fi
 
 # 1. Alias 등록 (cube.sh)
@@ -428,5 +451,13 @@ for agent in "${AGENTS[@]}"; do
     fi
   done
 done
+
+# 4. Pi packages (personal scope only; do not update Pi itself or all packages)
+if [[ " ${AGENTS[@]} " =~ " pi " ]]; then
+  if ! manage_pi_packages; then
+    echo "❌ Setup incomplete: Pi package setup failed. Existing successful steps are preserved."
+    exit 1
+  fi
+fi
 
 echo "🏁 Setup complete!"
