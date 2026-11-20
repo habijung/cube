@@ -41,17 +41,18 @@ If you are an AI agent, your first action is to **read `AGENTS.md`** and perform
 | **`cube-plan`**     | 구현 계획 수립 및 `.cube/plans/` 기반 멀티 에이전트 핸드오프 |
 | **`cube-plan-dev`** | 저장된 계획을 로드하여 개발을 이어가는 컨텍스트 복구 스킬    |
 | **`cube-question`** | 병렬 탐색을 통한 코드 및 아키텍처 질의응답                   |
-| **`cube-review`**   | 3-Step 프로토콜 기반 코드 리뷰 (자동 `.cube/review.md` 로깅) |
+| **`cube-review`**   | 3-Step 프로토콜 기반 코드 리뷰 (요청 시 상세 결과 저장)      |
 | **`cube-summary`**  | 세션 요약 및 컨텍스트 복구용 프롬프트 생성 (Web 호환)        |
 
 ### 🔍 `cube-review` Key Features
 
 - **Structured Protocol:** 초기화 → 리뷰(에이전트 병렬 실행) → 결과 출력의 3단계 워크플로우를 따릅니다.
 - **Model Strategies:** `Gemini Pro/Flash` 및 `Claude Opus/Sonnet` 등 상황에 맞는 최적의 모델 전략을 선택합니다.
-- **Auto Logging:** 리뷰 결과를 `.cube/review.md`에 자동으로 누적 저장하여 프로젝트의 품질 히스토리를 관리합니다.
+- **Optional Logging:** 기본으로는 채팅에 짧은 결과만 표시하고 기존 리뷰 파일은 건드리지 않습니다.
 - **Functional Flags:**
   - `--light`: 경량 모델(Flash, Sonnet)을 사용하여 빠른 피드백 제공
-  - `--clear`: 기존 `.cube/review.md`를 초기화하고 새로운 리뷰 결과만 기록
+  - `--save`: 상세 결과를 `.cube/review.md` 맨 위에 추가
+  - `--clear`: `.cube/review.md`를 이번 상세 결과로 교체
 
 ## 🛠 Getting Started
 
