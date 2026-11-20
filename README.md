@@ -47,10 +47,10 @@ If you are an AI agent, your first action is to **read `AGENTS.md`** and perform
 ### 🔍 `cube-review` Key Features
 
 - **Structured Protocol:** 초기화 → 리뷰(에이전트 병렬 실행) → 결과 출력의 3단계 워크플로우를 따릅니다.
-- **Model Strategies:** `Gemini Pro/Flash` 및 `Claude Opus/Sonnet` 등 상황에 맞는 최적의 모델 전략을 선택합니다.
+- **Model Selection:** 부모 에이전트가 리뷰 난이도와 확인된 비용 등급을 기준으로 모델을 선택합니다. 상위 비용 등급의 모델은 `--heavy` 또는 별도 승인이 있을 때만 사용합니다.
 - **Optional Logging:** 기본으로는 채팅에 짧은 결과만 표시하고 기존 리뷰 파일은 건드리지 않습니다.
 - **Functional Flags:**
-  - `--light`: 경량 모델(Flash, Sonnet)을 사용하여 빠른 피드백 제공
+  - `--heavy`: 이번 리뷰에서 필요한 범위에 상위 비용 등급 모델 사용 허용
   - `--save`: 상세 결과를 `.cube/review.md` 맨 위에 추가
   - `--clear`: `.cube/review.md`를 이번 상세 결과로 교체
 
