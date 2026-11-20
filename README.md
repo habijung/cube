@@ -46,7 +46,7 @@ If you are an AI agent, your first action is to **read `AGENTS.md`** and perform
 
 ### 🔍 `cube-review` Key Features
 
-- **Structured Protocol:** 초기화 → 리뷰(에이전트 병렬 실행) → 결과 출력의 3단계 워크플로우를 따릅니다.
+- **Structured Protocol:** 초기화 → 리뷰(주제별 독립 리뷰어 1명) → 결과 출력의 3단계 워크플로우를 따릅니다. 놓쳤을 때 영향이 큰 변경에는 해당 리뷰 영역(버그·아키텍처 또는 컨벤션·문서)당 리뷰어 한 명을 추가합니다.
 - **Model Selection:** 부모 에이전트가 리뷰 난이도와 확인된 비용 등급을 기준으로 모델을 선택합니다. 상위 비용 등급의 모델은 `--heavy` 또는 별도 승인이 있을 때만 사용합니다.
 - **Optional Logging:** 기본으로는 채팅에 짧은 결과만 표시하고 기존 리뷰 파일은 건드리지 않습니다.
 - **Functional Flags:**
