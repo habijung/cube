@@ -427,6 +427,20 @@ package.write_text(json.dumps({"name": name, "version": "2.0.0"}))
         self.assertNotEqual(self.install("pi").returncode, 0)
         self.assertEqual(path.read_text(), "{invalid json")
 
+    def test_pi_agent_directory_file_stops_before_any_installation(self):
+        path = self.root / "not-a-directory"
+        path.write_text("preserve this file\n")
+        self.env["PI_CODING_AGENT_DIR"] = str(path)
+
+        result = self.install("pi")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Package preflight failed", result.stdout)
+        self.assertIn(str(path), result.stdout)
+        self.assertEqual(path.read_text(), "preserve this file\n")
+        self.assertEqual(self.pi_calls(), [])
+        self.assertEqual(list(self.home.iterdir()), [])
+
     def test_invalid_manifest_stops_before_any_installation(self):
         path = self.repo / "agents/pi/packages.txt"
         for content in ("", "npm:pi-tools@latest\n", "$(touch injected)\n",

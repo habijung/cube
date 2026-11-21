@@ -29,9 +29,11 @@ def read_manifest(path):
 
 def read_packages(agent_dir):
     path = agent_dir / "settings.json"
-    if not path.exists():
+    try:
+        content = path.read_text()
+    except FileNotFoundError:
         return []
-    settings = json.loads(path.read_text())
+    settings = json.loads(content)
     if not isinstance(settings, dict):
         raise ValueError(f"Expected a settings object: {path}")
     packages = settings.get("packages", [])
